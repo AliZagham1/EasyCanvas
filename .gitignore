@@ -4,4 +4,4 @@ node_modules/
 .next/
 __pycache__/
 *.pyc
-.DS_Store
+.DS_StoreAGENTS.md
