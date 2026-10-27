@@ -1,0 +1,9 @@
+fastapi==0.143.0
+uvicorn==0.54.0
+filelock==4.2.4
+requests==2.34.2
+python-dotenv==1.2.4
+pypdf==6.21.2
+python-docx==1.2.0
+python-pptx==1.0.2
+# Legacy .doc/.ppt additionally require the LibreOffice system converter.

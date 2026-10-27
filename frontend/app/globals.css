@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fbfbfd;
+  --foreground: #191b25;
+  --surface: #ffffff;
+  --border: #e1e4ec;
+  --muted: #616879;
+  --accent: #6941c6;
+  --accent-soft: #eee9fb;
+  --sidebar: #f6f6fa;
+  --table-heading: #f5f6f9;
+  --row-hover: #faf9fd;
+  --radius: 8px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  font-optical-sizing: auto;
+}
+
+::selection { background: var(--accent-soft); color: var(--foreground); }
+button, a { -webkit-tap-highlight-color: transparent; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.app-shell { display: flex; height: 100dvh; overflow: hidden; }
+.app-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-color: #c4c7d3 transparent;
+  scrollbar-width: thin;
+}
+.sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--sidebar);
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 12px; margin-bottom: 36px; }
+.brand-name { color: var(--foreground); font-size: 20px; line-height: 1.4; font-weight: 650; letter-spacing: -0.035em; }
+.sidebar-nav { display: grid; gap: 6px; }
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  color: #454b5d;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 450;
+  transition: background-color 150ms, color 150ms;
+}
+.nav-link:hover { background: #eeeff5; color: var(--foreground); }
+.nav-link-active, .nav-link-active:hover { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.nav-link[aria-disabled="true"] { color: var(--muted); cursor: default; }
+.nav-link[aria-disabled="true"]:hover { background: transparent; color: var(--muted); }
+.nav-symbol { width: 20px; height: 20px; flex-shrink: 0; }
+.nav-soon { margin-left: auto; padding: 1px 5px; border: 1px solid #d9dce6; border-radius: 4px; font-size: 11px; line-height: 1.5; font-weight: 500; }
+
+.page-content { container-type: inline-size; max-width: 1320px; margin: 0 auto; padding: 40px 36px; }
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+.page-title { font-size: 38px; line-height: 1.2; font-weight: 700; letter-spacing: -0.035em; text-wrap: balance; }
+.page-description { margin-top: 8px; color: var(--muted); font-size: 16px; line-height: 1.5; }
+.primary-button {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: #454b5d;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+  transition: background-color 150ms;
+}
+.primary-button:hover { background: var(--table-heading); }
+
+/* Compact overview cells keep coursework as the main visual focus. */
+.summary-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.7fr); margin-bottom: 28px; }
+.summary-card { min-width: 0; padding: 0 24px; overflow-wrap: anywhere; }
+.summary-card + .summary-card { border-left: 1px solid var(--border); }
+.summary-card:first-child { padding-left: 4px; }
+.summary-card:last-child { padding-right: 0; }
+.summary-label { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.summary-value { margin-top: 8px; font-size: 32px; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.summary-state { font-size: 16px; line-height: 1.5; font-weight: 500; letter-spacing: normal; }
+.summary-qualifier { color: var(--muted); font-size: 13px; font-weight: 400; letter-spacing: normal; }
+.deadline-summary { margin-top: 8px; font-size: 16px; line-height: 1.6; font-weight: 550; }
+.summary-note { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.5; font-weight: 400; }
+.upcoming-summary { margin-bottom: 28px; padding: 0 4px; }
+
+.coursework-panel { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.coursework-panel + .coursework-panel { margin-top: 20px; }
+.panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 16px 20px; }
+.section-title { font-size: 20px; line-height: 1.4; font-weight: 650; letter-spacing: -0.025em; }
+.panel-note { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.text-link { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; color: var(--accent); font-size: 14px; line-height: 1.5; font-weight: 500; text-underline-offset: 4px; }
+.text-link:hover { text-decoration: underline; }
+.text-link svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+.coursework-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 15px; line-height: 1.5; }
+.coursework-table th { padding: 10px 20px; border-block: 1px solid var(--border); background: var(--table-heading); color: var(--muted); font-size: 13px; line-height: 1.5; font-weight: 500; }
+.coursework-table td { padding: 12px 20px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+.coursework-table tbody tr:last-child td { border-bottom: 0; }
+.coursework-table tbody tr:hover { background: var(--row-hover); }
+.assignment-course-column { width: 20%; }
+.assignment-name-column { width: 44%; }
+.assignment-date-column { width: 36%; }
+.course-code-column { width: 22%; }
+.course-name-column { width: 54%; }
+.course-upcoming-column { width: 24%; }
+.course-code { font-weight: 500; }
+.assignment-title { font-weight: 450; }
+.assignment-deadline { display: block; font-size: 14px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.cell-secondary { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.course-identity { display: flex; align-items: baseline; gap: 12px; }
+.course-dot { position: relative; top: -1px; width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: var(--course-accent, #8975be); }
+.course-accent-blue { --course-accent: #668bb9; }
+.course-accent-green { --course-accent: #64958a; }
+.course-accent-amber { --course-accent: #a78b5a; }
+.course-upcoming { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; font-size: 14px; }
+.course-view-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.coverage-notice { margin-bottom: 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.list-message { padding: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+@container (max-width: 760px) {
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-card:last-child { grid-column: 1 / -1; margin-top: 20px; padding: 20px 4px 0; border-left: 0; border-top: 1px solid var(--border); }
+}
+
+/* Keep every field readable when the available main area cannot hold columns. */
+@container (max-width: 720px) {
+  .coursework-table, .coursework-table tbody { display: block; }
+  .coursework-table colgroup { display: none; }
+  .coursework-table thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .coursework-table tbody tr { display: grid; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--border); }
+  .coursework-table td { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 0; border: 0; }
+  .coursework-table td::before { content: attr(data-label); color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .coursework-table td > div { min-width: 0; }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .sidebar { width: 220px; padding-inline: 12px; }
+  .page-content { padding: 32px 24px; }
+  .page-title { font-size: 34px; }
+}
+@media (max-width: 767px) {
+  .app-shell { flex-direction: column; }
+  .sidebar { width: 100%; padding: 16px; overflow: visible; border-right: 0; border-bottom: 1px solid var(--border); }
+  .brand { margin-bottom: 16px; padding: 0; }
+  .brand-name { font-size: 18px; }
+  .sidebar-nav { display: flex; overflow-x: auto; gap: 4px; padding: 4px; }
+  .nav-link { flex-shrink: 0; min-height: 40px; padding: 8px 10px; font-size: 13px; }
+  .nav-soon { font-size: 11px; }
+  .page-content { padding: 24px 16px; }
+  .page-header { align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  .page-title { font-size: 28px; }
+  .page-description { font-size: 14px; }
+  .summary-card { padding-inline: 16px; }
+  .summary-card:first-child { padding-left: 0; }
+  .summary-value { font-size: 28px; }
+  .summary-value.summary-state { font-size: 16px; }
+  .section-title { font-size: 18px; }
+  .panel-header { padding: 14px 16px; }
+  .coursework-table tbody tr { padding-inline: 16px; }
+  .coursework-table td { grid-template-columns: 76px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
