@@ -378,6 +378,11 @@ Avoid making the browser directly responsible for orchestrating many Canvas API 
 
 ## Testing Expectations
 
+Before fixing a production/demo regression, read `docs/STABILITY_LOG.md`.
+Check for an existing related issue and explain why its invariant or regression
+test did not prevent recurrence. Record meaningful bugs there; mark Fixed only
+after regression tests and a real scenario replay succeed.
+
 Every important behavior change should be verified.
 
 At minimum, consider successful case, empty-data case, unavailable-source case, invalid input, API failure, filtering correctness, and sorting correctness.

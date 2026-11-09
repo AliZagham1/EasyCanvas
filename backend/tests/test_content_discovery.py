@@ -1,6 +1,6 @@
 import unittest
 
-from backend.app.content_discovery import build_file_inventory
+from backend.app.content_discovery import build_file_inventory, source_url
 
 
 def record(kind, record_id, **metadata):
@@ -13,6 +13,19 @@ def record(kind, record_id, **metadata):
 
 
 class ContentDiscoveryTests(unittest.TestCase):
+    def test_syllabus_url_fallback_requires_a_valid_base_and_course_id(self):
+        syllabus = {"source_type": "syllabus", "course_id": 42}
+        self.assertEqual(source_url(syllabus, "https://canvas.example/"), "https://canvas.example/courses/42/assignments/syllabus")
+        for base in ("", "canvas.example", "javascript:bad", "https://[broken", "https://user:secret@canvas.example", "https://canvas.example?token=placeholder"):
+            self.assertIsNone(source_url(syllabus, base))
+        for course_id in (None, True, -1, "bad"):
+            self.assertIsNone(source_url({**syllabus, "course_id": course_id}, "https://canvas.example"))
+        self.assertIsNone(source_url({**syllabus, "source_type": "page"}, "https://canvas.example"))
+
+    def test_existing_source_link_is_preserved(self):
+        record = {"source_type": "syllabus", "course_id": 42, "url": "https://canvas.example/known-source"}
+        self.assertEqual(source_url(record, ""), record["url"])
+
     def test_same_file_keeps_all_references_and_listing_metadata(self):
         snapshot = {
             "course_id": 42,

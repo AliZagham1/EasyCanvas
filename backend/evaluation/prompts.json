@@ -1,0 +1,1524 @@
+{
+  "schema_version": 1,
+  "notes": [
+    "All course IDs and document data in this public dataset are synthetic.",
+    "fixture_plan is a declared input for deterministic routing tests, not a model output or NLP assertion.",
+    "Live query checks compare real model output against expected behavior; live assistant cases resolve current private courses separately.",
+    "Domain solve_assignment maps to the existing production intent solve_question; no new intent is introduced.",
+    "Date-only assignment explanations need live Canvas to identify the assignment, even though their main intent remains explanation."
+  ],
+  "cases": [
+    {
+      "name": "assignment_alias_1",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain HW1",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "assignment:101",
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "assignment_alias_2",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain homework 1",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "assignment:101",
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "assignment_alias_3",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain homework #1",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "assignment:101",
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "assignment_alias_4",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what am I supposed to do for HW1",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "assignment:101",
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "new paraphrase of previously covered assignment aliases"
+    },
+    {
+      "name": "assignment_alias_5",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "walk me through assignment 1",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "clarification",
+        "source_keys_required": [],
+        "source_keys_forbidden": [
+          "assignment:101",
+          "file:501",
+          "file:502"
+        ],
+        "notice_status": "clarification_needed"
+      },
+      "recent_work_coverage": "Unsupported alias guard: keep the deliberately unsafe HW1 provider hint, but require backend clarification for Assignment 1 without course-local equivalence."
+    },
+    {
+      "name": "assignment_alias_6",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what does HW1 want me to do",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "assignment:101",
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "new paraphrase of previously covered assignment aliases"
+    },
+    {
+      "name": "explicit_part_b",
+      "category": "assignment_aliasing",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what is part b of hw 1",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "HW 1",
+        "document_reference": "",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "1",
+        "part": "b"
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "assignment_reference": "HW 1",
+        "homework_number": "1",
+        "part": "b",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "homework_ten",
+      "category": "number_safety",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain homework 10",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 10",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "10"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:510"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          110
+        ],
+        "assignment_reference": "HW 10",
+        "homework_number": "10",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "deadline_hw6",
+      "category": "deadline_intent",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "when is homework 6 due",
+      "fixture_plan": {
+        "intent": "get_deadline",
+        "assignment_reference": "HW 6",
+        "document_reference": "",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "homework_number": "6"
+      },
+      "expected": {
+        "intent": "get_deadline",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "retrieval_route": "current_assignment_facts",
+        "source_keys_required": [
+          "assignment:106"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "assignment_reference": "HW 6",
+        "homework_number": "6"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "deadline_week",
+      "category": "deadline_intent",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what assignments are due this week",
+      "fixture_plan": {
+        "intent": "get_deadline",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "deadline_reference": "this week"
+      },
+      "expected": {
+        "intent": "get_deadline",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "retrieval_route": "current_assignment_facts",
+        "source_keys_required": [],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "deadline_reference": "this week"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "due_modifier",
+      "category": "deadline_intent",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what is being asked in homework 6 that is due",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 6",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "6"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:506"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "assignment_reference": "HW 6",
+        "homework_number": "6",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "due_tomorrow_explain",
+      "category": "deadline_intent",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain the assignment due tomorrow",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "deadline_reference": "tomorrow"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:506"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "deadline_reference": "tomorrow",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "due_friday_explain",
+      "category": "deadline_intent",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what do I need to do for the homework due Friday",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "deadline_reference": "Friday"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "deadline_reference": "Friday",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "practice_overview",
+      "category": "document_overview",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain Practice Questions 10",
+      "fixture_plan": {
+        "intent": "explain_document",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 10.pdf",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_document",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 10.pdf",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "practice_summary",
+      "category": "document_overview",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "summarize Practice Questions 10",
+      "fixture_plan": {
+        "intent": "summarize_document",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 10.pdf",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "summarize_document",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 10.pdf",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "active_pdf_overview",
+      "category": "document_overview",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "practice10",
+      "question": "explain this PDF",
+      "fixture_plan": {
+        "intent": "explain_document",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_document",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "practice_q1",
+      "category": "focused_retrieval",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what is question 1 in Practice Questions 10",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 10.pdf",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "question_number": "1"
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 10.pdf",
+        "question_number": "1",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "practice_q7",
+      "category": "focused_retrieval",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain question 7 from Practice Questions 10",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 10.pdf",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "question_number": "7"
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 10.pdf",
+        "question_number": "7",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "active_q7",
+      "category": "focused_retrieval",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "practice10",
+      "question": "explain question 7",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "question_number": "7"
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "question_number": "7",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "practice_one",
+      "category": "number_safety",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain Practice Questions 1",
+      "fixture_plan": {
+        "intent": "explain_document",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 1.pdf",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_document",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:1"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 1.pdf",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_explicit_1",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain the rubric for Iteration 3 Presentation",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "Iteration 3 Presentation",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ],
+        "assignment_reference": "Iteration 3 Presentation"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_explicit_2",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "how is Iteration 3 Presentation graded",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "Iteration 3 Presentation",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ],
+        "assignment_reference": "Iteration 3 Presentation"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_explicit_3",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what is the grading breakdown for Iteration 3 Presentation",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "Iteration 3 Presentation",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ],
+        "assignment_reference": "Iteration 3 Presentation"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_followup_1",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "rubric",
+      "question": "what is the grading breakdown",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_followup_2",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "rubric",
+      "question": "how many points is each criterion worth",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_followup_3",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "rubric",
+      "question": "how is this graded",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_followup_4",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "rubric",
+      "question": "what's the rubric",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "rubric_followup_5",
+      "category": "structured_rubric",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "rubric",
+      "question": "where do the points come from",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "policy_start",
+      "category": "policy_awareness",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "what is being asked in homework 6",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 6",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:506"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "assignment_reference": "HW 6",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "new: policy retrieval and behavior were not guaranteed by query routing"
+    },
+    {
+      "name": "policy_solve",
+      "category": "policy_awareness",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw6",
+      "question": "can you solve this assignment for me",
+      "fixture_plan": {
+        "intent": "solve_question",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "question",
+          "solution"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "solve_question",
+        "requested_data": [
+          "question",
+          "solution"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:506"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "retrieval_mode": "focused",
+        "policy_text_required": true,
+        "domain_action": "solve_assignment"
+      },
+      "recent_work_coverage": "new: policy retrieval and behavior were not guaranteed by query routing"
+    },
+    {
+      "name": "policy_explain",
+      "category": "policy_awareness",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw6",
+      "question": "explain this assignment",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:506"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          106
+        ],
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "new: policy retrieval and behavior were not guaranteed by query routing"
+    },
+    {
+      "name": "followup_b",
+      "category": "conversation_context",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "what does part b mean",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "part": "b"
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "part": "b",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "followup_function",
+      "category": "conversation_context",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "now explain countPositive",
+      "fixture_plan": {
+        "intent": "explain_question",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "part": ""
+      },
+      "expected": {
+        "intent": "explain_question",
+        "requested_data": [
+          "question"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:501"
+        ],
+        "source_keys_forbidden": [
+          "file:502"
+        ],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "part": "",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "followup_solution",
+      "category": "conversation_context",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "how do I solve it",
+      "fixture_plan": {
+        "intent": "solve_question",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "question",
+          "solution"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "part": ""
+      },
+      "expected": {
+        "intent": "solve_question",
+        "requested_data": [
+          "question",
+          "solution"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": true,
+        "retrieval_route": "assignment_material",
+        "source_keys_required": [
+          "file:502"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          101
+        ],
+        "part": "",
+        "retrieval_mode": "focused"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "topic_change",
+      "category": "conversation_context",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "explain Practice Questions 10 instead",
+      "fixture_plan": {
+        "intent": "explain_document",
+        "assignment_reference": "",
+        "document_reference": "Practice Questions 10.pdf",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_document",
+        "requested_data": [
+          "overview"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "document_material",
+        "source_keys_required": [
+          "file:10"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "document_reference": "Practice Questions 10.pdf",
+        "retrieval_mode": "overview"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "deadline_followup",
+      "category": "conversation_context",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "when is it due",
+      "fixture_plan": {
+        "intent": "get_deadline",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "get_deadline",
+        "requested_data": [
+          "deadline"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": true,
+        "retrieval_route": "current_assignment_facts",
+        "source_keys_required": [
+          "assignment:101"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          101
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "submission_followup",
+      "category": "structured_facts",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "hw1",
+      "question": "did I submit it",
+      "fixture_plan": {
+        "intent": "get_submission_status",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "submission_status"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": true
+      },
+      "expected": {
+        "intent": "get_submission_status",
+        "requested_data": [
+          "submission_status"
+        ],
+        "requires_live_canvas": true,
+        "use_active_documents": true,
+        "retrieval_route": "current_assignment_facts",
+        "source_keys_required": [
+          "assignment:101"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          101
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "no_active_rubric",
+      "category": "ambiguity",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "how is this graded",
+      "fixture_plan": {
+        "intent": "explain_rubric",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "explain_rubric",
+        "requested_data": [
+          "rubric"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "saved_assignment_rubric",
+        "source_keys_required": [
+          "assignment:201"
+        ],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [
+          201
+        ]
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "unknown_homework",
+      "category": "ambiguity",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "explain homework 99",
+      "fixture_plan": {
+        "intent": "explain_assignment",
+        "assignment_reference": "HW 99",
+        "document_reference": "",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "homework_number": "99"
+      },
+      "expected": {
+        "intent": "explain_assignment",
+        "requested_data": [
+          "instructions",
+          "linked_documents"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "clarification",
+        "source_keys_required": [],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": [],
+        "assignment_reference": "HW 99",
+        "homework_number": "99"
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    },
+    {
+      "name": "study_plan_recognized",
+      "category": "planned_feature",
+      "course_id": 42,
+      "data_origin": "synthetic",
+      "conversation_context": "none",
+      "question": "make a study plan for tomorrow",
+      "fixture_plan": {
+        "intent": "study_plan",
+        "assignment_reference": "",
+        "document_reference": "",
+        "requested_data": [
+          "study_plan"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false
+      },
+      "expected": {
+        "intent": "study_plan",
+        "requested_data": [
+          "study_plan"
+        ],
+        "requires_live_canvas": false,
+        "use_active_documents": false,
+        "retrieval_route": "study_plan_unavailable",
+        "source_keys_required": [],
+        "source_keys_forbidden": [],
+        "resolved_assignment_ids": []
+      },
+      "recent_work_coverage": "query-understanding/retrieval-routing"
+    }
+  ]
+}

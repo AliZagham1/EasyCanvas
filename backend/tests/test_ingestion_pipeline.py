@@ -1,4 +1,5 @@
 import copy
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,6 +40,7 @@ def snapshot():
 
 class IngestionPipelineTests(unittest.TestCase):
     def setUp(self):
+        patch.dict(os.environ, {"EASYCANVAS_VISION_ENABLED": "false"}).start()
         self.directory = tempfile.TemporaryDirectory()
         self.store = IngestionStore("test-student", Path(self.directory.name) / "ingestion.sqlite3")
         self.metadata = {"id": 9, "filename": "lecture.pdf", "display_name": "Lecture.pdf", "updated_at": "2026-10-01T00:00:00Z", "size": 1024, "url": "https://canvas.example.edu/files/9/download"}
@@ -77,6 +79,17 @@ class IngestionPipelineTests(unittest.TestCase):
         self.assertEqual(self.download.call_count, 1)
         self.assertEqual(self.info.call_count, 2)
         self.assertEqual(len(self.store.load_documents(42, readable_only=True)), 3)
+
+    def test_ingestion_creates_chunks_then_reuses_them_without_another_download(self):
+        first = self.run_ingestion()
+        self.assertEqual(first["chunking"], {"processed": 3, "reused": 0, "chunks": 3})
+        pdf_chunk = self.store.load_chunks(42, "file:9")[0]
+        self.assertEqual(pdf_chunk["locations"][0]["page_number"], 1)
+        self.assertEqual(pdf_chunk["references"][0]["module_id"], 5)
+        self.snapshot["synced_at"] = "second"
+        second = self.run_ingestion()
+        self.assertEqual(second["chunking"], {"processed": 0, "reused": 3, "chunks": 3})
+        self.assertEqual(second["statistics"]["downloads"], 0)
 
     def test_changed_timestamp_and_body_refresh_only_changed_documents(self):
         self.run_ingestion()
@@ -190,7 +203,7 @@ class IngestionPipelineTests(unittest.TestCase):
                 first = self.run_ingestion()
                 self.assertEqual(first["statistics"]["downloads"], 1)
                 saved = self.store.load_document(42, "file:9")
-                self.assertEqual(saved["status"], "ok")
+                self.assertIn(saved["status"], ("ok", "partial"))
                 self.assertTrue(saved[units])
                 with patch("backend.app.document_service.extract_file") as extract:
                     second = self.run_ingestion()

@@ -84,6 +84,17 @@ def get_courses():
     return _get_paginated(url, params)
 
 
+# Individual current facts use the same bounded/authenticated request helper.
+def get_assignment(course_id, assignment_id):
+    """Fetch one current assignment, including this student's submission state."""
+    url = f"{CANVAS_URL}/api/v1/courses/{course_id}/assignments/{assignment_id}"
+    response = _request_get(url, headers=headers, params={"include[]": "submission"})
+    try:
+        return response.json()
+    finally:
+        response.close()
+
+
 # ---------------------------------------------------------
 # GET ASSIGNMENTS FOR ONE COURSE
 # ---------------------------------------------------------
@@ -220,6 +231,7 @@ def _clean_course(course):
         "name": course.get("name"),
         "course_code": course.get("course_code"),
         "enrollment_term_id": course.get("enrollment_term_id"),
+        "term": course.get("term"),
     }
 
 

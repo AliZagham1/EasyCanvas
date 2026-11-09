@@ -10,8 +10,8 @@ const links = [
   { href: "/upcoming", label: "Upcoming", path: "M7 3v4 M17 3v4 M3 10h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M7 14h3 M7 17h6" },
   { href: "/priorities", disabled: true, label: "Priorities", path: "M5 21V4 M5 4c4-4 10 4 14 0v10c-4 4-10-4-14 0" },
   { href: "/class-schedule", label: "Class Schedule", disabled: true, path: "M7 3v4 M17 3v4 M3 10h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M8 14h3v3H8z M15 14h2" },
-  { href: "/study-assistant", disabled: true, label: "Study Assistant", path: "M21 11a8 8 0 0 1-8 8H7l-5 3V5a2 2 0 0 1 2-2h9a8 8 0 0 1 8 8Z M7 8h9 M7 12h6" },
-  { href: "/settings", disabled: true, label: "Settings", path: "M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6" },
+  { href: "/study-assistant", label: "Study Assistant", path: "M21 11a8 8 0 0 1-8 8H7l-5 3V5a2 2 0 0 1 2-2h9a8 8 0 0 1 8 8Z M7 8h9 M7 12h6" },
+  { href: "/settings", label: "Settings", path: "M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6" },
 ];
 
 export default function Sidebar() {

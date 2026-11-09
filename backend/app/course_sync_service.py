@@ -16,6 +16,7 @@ from filelock import FileLock, Timeout
 from backend.app.canvas_service import get_cache_namespace
 from backend.app.ingestion_service import ingest_current_courses
 from backend.app.ingestion_store import DEFAULT_DATABASE, IngestionStore
+from backend.app.search_index_service import recover_jobs, process_jobs
 
 DEFAULT_INTERVAL_SECONDS = 30 * 60
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -66,17 +67,21 @@ def run_worker(store, interval, parent_pid=None):
         return
     try:
         try:
+            recover_jobs(store)
             state = store.load_sync_state()
             if not state or state["status"] != "queued":
                 store.queue_sync("startup", reset=True)
             while True:
                 if parent_pid is not None and os.getppid() != parent_pid:
                     raise KeyboardInterrupt
+                # Resume saved search work before a potentially slow Canvas/Vision sweep.
+                process_jobs(store)
                 state = store.load_sync_state()
                 if state["status"] == "queued":
                     _run_sync(store, state, interval, parent_pid)
                 elif state.get("next_sync_at") and _now() >= datetime.fromisoformat(state["next_sync_at"]):
                     store.queue_sync("scheduled")
+                process_jobs(store)
                 time.sleep(1)
         except KeyboardInterrupt:
             state = store.load_sync_state()
@@ -123,6 +128,11 @@ class CourseSyncService:
             state = self.store.queue_sync("manual")
             self._start_process()
             return state
+
+    def ensure_worker(self):
+        """Wake the existing worker for manual indexing without another Canvas sweep."""
+        with self._lock:
+            self._start_process()
 
     def status(self):
         state = self.store.load_sync_state() or {"status": "idle", "courses": [], "total_courses": None}
