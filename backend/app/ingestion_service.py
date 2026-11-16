@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -197,10 +198,11 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
     Returns concise per-document outcomes and counters. Read saved text through
     IngestionStore.load_documents(readable_only=True). No binary files are saved.
     This runs explicitly, separately from the dashboard's existing requests.
+
+    The previously published course snapshot stays authoritative until this
+    sync commits: it carries a `refresh` marker while running, and keeps it as
+    failed/interrupted if the sync stops, so saved material remains available.
     """
-    from backend.app import document_service
-    from backend.app import visual_document_service
-    from backend.app.chunking_service import ensure_course_chunks
     from backend.app.ingestion_store import IngestionStore
 
     if not isinstance(course_id, int) or isinstance(course_id, bool) or course_id <= 0:
@@ -209,14 +211,86 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
         raise ValueError("max_files must be a non-negative integer or None.")
     store = store or IngestionStore(canvas_service.get_cache_namespace())
     started = time.monotonic()
-    snapshot = sync_course(course_id, include_page_bodies=True)
-    snapshot["ingestion_status"] = "running"
-    store.save_course(snapshot)
+    # Mark the refresh before contacting Canvas: discovery is part of the sync,
+    # and answers given meanwhile should say they use the last saved material.
+    published = _begin_refresh(store, course_id)
+    snapshot = None
+    try:
+        snapshot = sync_course(course_id, include_page_bodies=True)
+        _start_processing(store, course_id, snapshot, published)
+        return _ingest_snapshot(course_id, snapshot, store, started=started, max_files=max_files, force=force,
+                                on_progress=on_progress, vision_provider=vision_provider)
+    except BaseException as error:
+        _abandon_refresh(store, course_id, snapshot, published, error)
+        raise
+
+
+def _begin_refresh(store, course_id):
+    """Mark a refresh on the published snapshot instead of replacing it early.
+
+    The marker starts in the `discovery` phase with no new generation yet, so
+    document visibility is exactly the published generation. Returns the
+    published snapshot, or None for a first sync (nothing saved to keep).
+    """
+    published = store.load_course(course_id)
+    if published and not published.get("materials_removed"):
+        marker = {"status": "running", "phase": "discovery", "synced_at": None,
+                  "started_at": datetime.now(timezone.utc).isoformat()}
+        store.save_course({**published, "refresh": marker})
+        return published
+    return None
+
+
+def _start_processing(store, course_id, snapshot, published):
+    """After discovery, attach the new generation to the marker (or start a first sync)."""
+    if published is None:
+        snapshot["ingestion_status"] = "running"
+        store.save_course(snapshot)
+        return
+    current = store.load_course(course_id) or published
+    current["refresh"] = {**(current.get("refresh") or {}), "status": "running", "phase": "processing",
+                          "synced_at": snapshot["synced_at"]}
+    store.save_course(current)
+
+
+def _abandon_refresh(store, course_id, snapshot, published, error):
+    """Record a failed/interrupted sync without hiding saved or refreshed material."""
+    status = "failed" if isinstance(error, Exception) else "interrupted"
+    try:
+        if published is not None:
+            current = store.load_course(course_id) or published
+            current["refresh"] = {**(current.get("refresh") or {}), "status": status,
+                                  "finished_at": datetime.now(timezone.utc).isoformat(), "error_type": type(error).__name__}
+        elif snapshot is not None:
+            current = {**snapshot, "ingestion_status": status, "error_type": type(error).__name__}
+        else:
+            return  # First sync failed during discovery: nothing was saved to mark.
+        store.save_course(current)
+        if status == "failed":
+            # Replacements prepared before the failure can still become searchable.
+            from backend.app.search_index_service import queue_course
+            queue_course(course_id, store=store)
+    except Exception:
+        # The original failure is still raised and reported by the caller.
+        logging.getLogger(__name__).warning("Could not record the unfinished course sync state.")
+
+
+def _ingest_snapshot(course_id, snapshot, store, *, started, max_files, force, on_progress, vision_provider):
+    """Process one discovered snapshot; called only through ingest_course()."""
+    from backend.app import document_service
+    from backend.app import visual_document_service
+    from backend.app.chunking_service import ensure_course_chunks, ensure_document_chunks
+
     statistics = {key: 0 for key in ("processed", "reused", "downloads", "downloaded_bytes", "readable", "partial", "no_text", "unsupported", "encrypted", "too_large", "unavailable", "error", "deferred")}
     outcomes = []
+    chunked_now = set()
 
     def finish(document, action):
         store.save_document(course_id, document, snapshot["synced_at"])
+        # Prepare a changed document's replacement chunks now; the retrieval
+        # view keeps any previous ready version until these are also embedded.
+        if ensure_document_chunks(course_id, store, document["document_key"])["processed"]:
+            chunked_now.add(document["document_key"])
         if action in ("reused", "extracted"):
             statistics["reused" if action == "reused" else "processed"] += 1
         status = document["status"]
@@ -250,7 +324,11 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
         elif cached is not None:
             finish(cached, "reused")
         else:
-            finish({**document, **document_service.extract_html(html)}, "extracted")
+            try:
+                extracted, action = {**document, **document_service.extract_html(html)}, "extracted"
+            except Exception as error:
+                extracted, action = _processing_failure(document, error), "failed"
+            finish(extracted, action)
 
     inventory = snapshot["file_inventory"]
     if on_progress:
@@ -313,6 +391,9 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
             code = error.response.status_code if isinstance(error, requests.RequestException) and error.response is not None else None
             document.update(status="unavailable" if code in (403, 404) else "error", http_status=code, error_type=type(error).__name__, text="", pages=[])
             action = "failed"
+        except Exception as error:
+            # An unexpected extractor/converter defect affects only this file.
+            document, action = _processing_failure(document, error), "failed"
         finish(document, action)
         if on_progress:
             on_progress(f"File {index + 1}/{len(inventory)}: {document['title'] or file_id}: {document['status']} ({action})")
@@ -325,16 +406,29 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
             statistics["downloaded_bytes"] += downloaded
         finish(document, action)
 
-    chunking = ensure_course_chunks(course_id, store)
+    final = ensure_course_chunks(course_id, store)
+    # Report documents chunked during this sync, whether per document or in the final pass.
+    chunking = {"processed": final["processed"] + len(chunked_now),
+                "reused": max(0, final["reused"] - len(chunked_now)), "chunks": final["chunks"]}
     statistics["elapsed_seconds"] = round(time.monotonic() - started, 2)
     snapshot["ingestion_status"] = "finished"
+    snapshot.pop("refresh", None)
     snapshot["coverage"] = "partial" if any(value["status"] != "ok" for value in snapshot["source_status"].values()) or any(doc["status"] != "ok" for doc in outcomes) else "ok"
     snapshot["ingestion_statistics"] = statistics
     snapshot["chunking_statistics"] = chunking
+    # Commit: this sync's generation becomes the published one. Documents it
+    # did not rediscover stop being current only now.
     store.save_course(snapshot)
+    store.prune_served_versions(course_id)
     from backend.app.search_index_service import queue_course
     queue_course(course_id, store=store)
     return {"snapshot": snapshot, "documents": outcomes, "statistics": statistics, "chunking": chunking, "database": str(store.path)}
+
+
+def _processing_failure(document, error):
+    """Record an unexpected processing defect as a safe per-document error category."""
+    return {**document, "status": "error", "error_type": type(error).__name__,
+            "error_category": "processing_error", "http_status": None, "text": "", "pages": []}
 
 
 def format_ingestion_summary(result):
@@ -416,6 +510,8 @@ def enrich_saved_course(course_id, *, store=None, vision_provider=None, document
             code = error.response.status_code if isinstance(error, requests.RequestException) and error.response is not None else None
             document.update(status="unavailable" if code in (401, 403, 404, 410) else "error",
                             http_status=code, error_type=type(error).__name__, text="", pages=[])
+        except Exception as error:
+            document = _processing_failure(document, error)
         store.save_document(course_id, document, snapshot["synced_at"])
         outcome = {key: document.get(key) for key in ("document_key", "title", "status", "character_count", "visual_processing", "error_type")}
         report["documents"].append(outcome)

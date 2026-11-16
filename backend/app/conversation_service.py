@@ -102,7 +102,7 @@ class ConversationService:
 
     @staticmethod
     def context(session, store):
-        documents = {doc["document_key"]: doc for doc in store.load_documents(session.course_id, readable_only=True)}
+        documents = {doc["document_key"]: doc for doc in store.load_documents(session.course_id, readable_only=True, served=True)}
         active = [{"document_key": key, "title": documents[key].get("title")} for key in session.active_documents if key in documents]
         # At most three completed turns and 6,000 characters of message content.
         remaining, history = 6000, []

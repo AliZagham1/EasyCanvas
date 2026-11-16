@@ -5,6 +5,20 @@ import re
 
 UNREADABLE_MESSAGE = "Some content could not be read reliably."
 OVERVIEW_MESSAGE = "This overview covers selected sections of the document."
+STALE_MESSAGE = "This material could not be refreshed from Canvas; the answer uses the last successfully processed version."
+NEWER_VERSION_MESSAGE = ("Canvas has a newer version of this material that could not be processed yet; "
+                         "the answer uses the previous version.")
+PREVIOUS_VERSION_MESSAGE = ("An updated version of this material is still being prepared for search; "
+                            "the answer uses the previous version.")
+
+
+def freshness_limitations(origin):
+    """Say when a cited source is a retained/previous version rather than current."""
+    if origin.get("served_version") == "previous":
+        return [PREVIOUS_VERSION_MESSAGE]
+    if origin.get("cache_status") == "stale_but_usable":
+        return [NEWER_VERSION_MESSAGE if origin.get("newer_version_unavailable") else STALE_MESSAGE]
+    return []
 COLLECTIONS = (("pages", "page_number"), ("rendered_pages", "rendered_page_number"), ("slides", "slide_number"))
 
 
@@ -92,6 +106,10 @@ def assess_document_quality(document):
 
 def extraction_limitations(origin):
     """Keep extraction warnings distinct from index/context limits and page breaks."""
+    return sorted(set(_extraction_limitations(origin)) | set(freshness_limitations(origin)))
+
+
+def _extraction_limitations(origin):
     locations = origin.get("locations") or []
     warnings = set(origin.get("warnings") or [])
     warnings.update(warning for location in locations for warning in location.get("warnings") or [])
@@ -105,6 +123,11 @@ def extraction_limitations(origin):
 
 
 def answer_limitations(origin, question, *, overview=False):
+    """Scoped extraction warnings plus whether the cited version is current."""
+    return sorted(set(_answer_limitations(origin, question, overview=overview)) | set(freshness_limitations(origin)))
+
+
+def _answer_limitations(origin, question, *, overview=False):
     """Scope inherited document warnings to the cited units and requested content.
 
     Missing visuals elsewhere do not make clean Word blocks unreadable. Unit-local
@@ -126,7 +149,7 @@ def answer_limitations(origin, question, *, overview=False):
         return []
     if not has_local_failure and not unit_warnings and clear_units and inherited and inherited <= visual and not dependent:
         return []
-    result = extraction_limitations(origin)
+    result = _extraction_limitations(origin)
     if inherited & visual and dependent:
         result = [w for w in result if w not in visual]
         result.append('Some visual content relevant to this question has not been read reliably.')

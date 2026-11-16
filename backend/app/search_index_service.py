@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from backend.app.embedding_service import EmbeddingConfiguration, default_store, embed_course
+from backend.app.ingestion_store import material_refresh
 
 
 def index_status(course_id, *, store=None, configuration=None):
@@ -35,7 +36,8 @@ def index_status(course_id, *, store=None, configuration=None):
                           'extraction_status': document.get('status')})
     matching = job.get('config_hash') == configuration.fingerprint
     job_status = job.get('status', 'idle') if matching else 'idle'
-    if snapshot.get('ingestion_status') == 'running':
+    refresh = material_refresh(snapshot)
+    if refresh and refresh['state'] == 'running':
         state = 'syncing'
     elif not result['eligible_chunks']:
         state = 'empty'
@@ -52,6 +54,7 @@ def index_status(course_id, *, store=None, configuration=None):
     return {'course_id': course_id, 'title': metadata.get('course_code') or metadata.get('name') or str(course_id),
             **result, 'unique_inputs': len(unique), 'indexed_inputs': len(unique & cached.keys()),
             'status': state, 'job_status': job_status, 'automatic': store.load_settings()['auto_index'],
+            'material_refresh': refresh['state'] if refresh else None,
             'last_successful_at': (job.get('last_successful_at') if matching else None) or result['last_successful_at'],
             'error': job.get('error') if matching else None, 'documents': documents}
 
@@ -75,7 +78,8 @@ def recover_jobs(store):
     if store.load_settings()['auto_index']:
         for course_id in store.saved_current_course_ids():
             snapshot = store.load_course(course_id)
-            if snapshot and not snapshot.get('materials_removed') and snapshot.get('ingestion_status') != 'running':
+            refresh = material_refresh(snapshot) if snapshot else None
+            if snapshot and not snapshot.get('materials_removed') and not (refresh and refresh['state'] == 'running'):
                 queue_course(course_id, store=store)
 
 
@@ -109,6 +113,8 @@ def process_jobs(store, *, provider=None, batch_size=32):
             job.update(status='completed', last_successful_at=datetime.now(timezone.utc).isoformat(),
                        failed_hashes=[], retry_after=None, generated=report['generated'], reused=report['reused'])
             reports.append(report)
+            # Replacements are now searchable; retained previous versions can go.
+            store.prune_served_versions(course_id, configuration)
         except _Paused:
             job.update(status='paused')
         except Exception:

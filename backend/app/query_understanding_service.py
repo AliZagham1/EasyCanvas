@@ -142,7 +142,7 @@ def query_context(course_id, store, conversation_context=None):
     context.update(course_code=metadata.get("course_code"), course_name=metadata.get("name"),
                    current_time_utc=datetime.now(timezone.utc).isoformat(),
                    assignment_titles=[(record.get("title") or "")[:180] for record in snapshot.get("assignments", [])][:200],
-                   document_titles=[(doc.get("title") or "")[:180] for doc in store.load_documents(course_id)
+                   document_titles=[(doc.get("title") or "")[:180] for doc in store.load_documents(course_id, served=True)
                                     if doc.get("source_type") in ("file", "syllabus_file")][:200])
     return context
 

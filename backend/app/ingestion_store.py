@@ -19,9 +19,16 @@ MATERIAL_TABLES = {
     'document_chunk_state': 'length(input_hash) + length(chunker_version)',
     'chunk_embeddings': 'length(vector_blob) + length(config_json)',
     'visual_extractions': 'length(CAST(result_json AS BLOB))',
+    'document_served_versions': 'length(CAST(document_json AS BLOB)) + length(CAST(chunks_json AS BLOB))',
 }
 READ_FIELDS = ("latest_attempt", "stale", "content_status", "refresh_status",
-               "content_usable", "cache_status", "last_refresh_error")
+               "content_usable", "cache_status", "last_refresh_error", "newer_version_unavailable",
+               "served_version")
+# Reasons that must hide saved text until a later successful processing clears
+# them. Older databases may also contain the retired soft reasons
+# 'processing_unavailable'/'changed_content'; those no longer block content.
+HARD_BLOCK_REASONS = {'access_revoked', 'removed', 'access_unavailable', 'superseded', 'invalid_content'}
+PENDING_REFRESH_STATES = ('running', 'failed', 'interrupted')
 
 
 def _temporary_refresh_failure(attempt):
@@ -37,19 +44,87 @@ def _temporary_refresh_failure(attempt):
     )
 
 
+def _preservable_failure(attempt):
+    """A failed refresh that does not show the saved text is inaccessible or replaced.
+
+    Network, provider, parser and unexpected processing errors keep the last good
+    extraction usable (clearly marked stale). Canvas access/removal answers do not.
+    """
+    if attempt.get('status') == 'deferred':
+        return True
+    return attempt.get('status') == 'error' and attempt.get('http_status') not in (401, 403, 404, 410)
+
+
 def _refresh_block_reason(document, attempt):
-    """Keep confirmed revocation/change distinct from a temporary failed check."""
+    """Hide saved text only for confirmed access loss or a successful replacement."""
     code = attempt.get('http_status')
     if code in (401, 403) or attempt.get('error_type') == 'LockedForUser':
         return 'access_revoked'
     if code in (404, 410):
         return 'removed'
-    if attempt.get('status') in ('ok', 'partial'):
+    if attempt.get('status') in ('ok', 'partial') or _preservable_failure(attempt):
         return None
-    for field in ('version', 'content_hash'):
-        if document.get(field) is not None and attempt.get(field) is not None and document[field] != attempt[field]:
-            return 'changed_content'
-    return None if _temporary_refresh_failure(attempt) else 'processing_unavailable'
+    if attempt.get('status') == 'unavailable':
+        return 'access_unavailable'
+    # no_text/unsupported/encrypted: the newest content was processed and has no
+    # readable text, so older text must not stand in for it.
+    return 'superseded'
+
+
+def _hard_block(value):
+    return value if value in HARD_BLOCK_REASONS else None
+
+
+def _parse_time(value):
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else None
+
+
+def pending_refresh(snapshot):
+    """Return the uncommitted refresh marker for a published snapshot, if any."""
+    marker = (snapshot or {}).get('refresh') or {}
+    return marker if marker.get('status') in PENDING_REFRESH_STATES else None
+
+
+def material_refresh(snapshot):
+    """Describe an in-progress/unfinished course sync for status and answer notices.
+
+    `previous_material` is False only for a first sync, whose documents appear as
+    they are processed because no earlier published generation exists.
+    """
+    marker = pending_refresh(snapshot)
+    if marker:
+        return {'state': marker['status'], 'previous_material': True,
+                'started_at': marker.get('started_at'), 'published_at': (snapshot or {}).get('synced_at')}
+    status = (snapshot or {}).get('ingestion_status')
+    if status in PENDING_REFRESH_STATES:
+        return {'state': status, 'previous_material': False, 'started_at': (snapshot or {}).get('synced_at'),
+                'published_at': None}
+    return None
+
+
+def visible_in_snapshot(last_seen_at, snapshot):
+    """Keep the last published generation visible until a new sync commits.
+
+    Without a pending refresh only the published `synced_at` is current. While a
+    refresh is running, failed or interrupted, documents restamped by that
+    uncommitted work are also current: each key has one row holding its latest
+    state, so nothing is duplicated and confirmed access loss still applies.
+    Documents last seen before the published sync remain excluded.
+    """
+    published = snapshot.get('synced_at')
+    if last_seen_at == published:
+        return True
+    marker = pending_refresh(snapshot)
+    if not marker:
+        return False
+    if last_seen_at == marker.get('synced_at'):
+        return True
+    seen, base = _parse_time(last_seen_at), _parse_time(published)
+    return bool(seen and base and seen > base)
 
 
 def validate_vector(vector, dimensions):
@@ -174,6 +249,14 @@ class IngestionStore:
                     state_json TEXT NOT NULL,
                     PRIMARY KEY (namespace, course_id)
                 );
+                CREATE TABLE IF NOT EXISTS document_served_versions (
+                    namespace TEXT NOT NULL, course_id INTEGER NOT NULL,
+                    document_key TEXT NOT NULL, document_json TEXT NOT NULL,
+                    attempt_json TEXT NOT NULL, chunks_json TEXT NOT NULL,
+                    input_hash TEXT NOT NULL, chunker_version TEXT NOT NULL,
+                    saved_at TEXT NOT NULL,
+                    PRIMARY KEY (namespace, course_id, document_key)
+                );
                 CREATE TABLE IF NOT EXISTS api_usage (
                     namespace TEXT NOT NULL, operation_id TEXT NOT NULL,
                     recorded_at TEXT NOT NULL, operation TEXT NOT NULL,
@@ -211,6 +294,32 @@ class IngestionStore:
                 (self.namespace, course_id),
             ).fetchone()
         return json.loads(row["snapshot_json"]) if row else None
+
+    def recover_interrupted_refreshes(self):
+        """Mark refreshes left 'running' by a stopped/killed worker as interrupted.
+
+        Only the single worker (holding the sync lock) calls this before it starts
+        work. Saved documents are untouched: published and partially refreshed
+        material stays visible until the next sync commits.
+        """
+        recovered = []
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for row in connection.execute("SELECT course_id, snapshot_json FROM courses WHERE namespace=?",
+                                          (self.namespace,)).fetchall():
+                snapshot = json.loads(row["snapshot_json"])
+                marker = snapshot.get('refresh') or {}
+                if marker.get('status') == 'running':
+                    snapshot['refresh'] = {**marker, 'status': 'interrupted', 'finished_at': now}
+                elif snapshot.get('ingestion_status') == 'running':
+                    snapshot['ingestion_status'] = 'interrupted'
+                else:
+                    continue
+                connection.execute("UPDATE courses SET snapshot_json=? WHERE namespace=? AND course_id=?",
+                                   (json.dumps(snapshot), self.namespace, row["course_id"]))
+                recovered.append(row["course_id"])
+        return recovered
 
     def retention_snapshot(self, connection):
         """Read account-scoped material sizes and retention choices in one transaction."""
@@ -304,23 +413,163 @@ class IngestionStore:
         attempt = {key: value for key, value in document.items() if key not in ("text", *TEXT_COLLECTIONS)}
         attempt["attempted_at"] = datetime.now(timezone.utc).isoformat()
         payload = dict(document)
-        previous = self.load_document(course_id, document["document_key"])
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM documents WHERE namespace = ? AND course_id = ? AND document_key = ?",
+                (self.namespace, course_id, document["document_key"]),
+            ).fetchone()
+        previous = self._decode(row) if row else None
         if document["status"] not in ("ok", "partial") and previous and previous.get("text"):
             payload = {key: value for key, value in previous.items() if key not in READ_FIELDS}
             # A later timeout must not resurrect content already known revoked,
-            # removed, changed, or invalid. Only a successful processing clears it.
-            payload['cache_blocked'] = previous.get('cache_blocked') or _refresh_block_reason(payload, attempt)
+            # removed, superseded, or invalid. Only a successful processing clears it.
+            payload['cache_blocked'] = _hard_block(previous.get('cache_blocked')) or _refresh_block_reason(payload, attempt)
         elif document['status'] in ('ok', 'partial'):
             payload.pop('cache_blocked', None)
             payload['last_successful_refresh'] = attempt['attempted_at']
         # Store text once in its original units, then join it again on read.
         if any(payload.get(key) for key in TEXT_COLLECTIONS):
             payload.pop("text", None)
+        if previous and previous['content_usable']:
+            self._retain_served_version(course_id, row, previous, payload, attempt)
         with self._connection() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO documents VALUES (?, ?, ?, ?, ?, ?)",
                 (self.namespace, course_id, document["document_key"], json.dumps(payload), json.dumps(attempt), seen_at),
             )
+
+    # ------------------------------------------------------------------
+    # Previous searchable versions
+    # ------------------------------------------------------------------
+    def _embedded_hashes(self, course_id, configuration=None):
+        """Text hashes with a vector for the given (default) embedding configuration."""
+        from backend.app.embedding_service import EmbeddingConfiguration
+        configuration = configuration or EmbeddingConfiguration()
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT text_hash FROM chunk_embeddings WHERE namespace=? AND course_id=? AND provider=? AND model=? AND config_hash=?",
+                (self.namespace, course_id, configuration.provider, configuration.model, configuration.fingerprint),
+            ).fetchall()
+        return {row[0] for row in rows}
+
+    @staticmethod
+    def _chunk_set_ready(document, rows, state, embedded):
+        """True when this exact extraction is chunked and every eligible chunk is embedded."""
+        from backend.app import chunking_service
+        if not state or state['input_hash'] != chunking_service.chunk_input_hash(document) \
+                or state['chunker_version'] != chunking_service.CHUNKER_VERSION:
+            return False
+        if len(rows) != state['chunk_count'] or any(row['input_hash'] != state['input_hash'] for row in rows):
+            return False
+        for row in rows:
+            chunk = {'text': row['text'], 'locations': json.loads(row['locations_json'])}
+            metadata = chunking_service.chunk_metadata(document, chunk)
+            if metadata['embedding_eligible'] and metadata['text_hash'] not in embedded:
+                return False
+        return True
+
+    def _document_chunk_rows(self, course_id, document_key):
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM document_chunks WHERE namespace=? AND course_id=? AND document_key=? ORDER BY chunk_index",
+                (self.namespace, course_id, document_key)).fetchall()
+            state = connection.execute(
+                "SELECT * FROM document_chunk_state WHERE namespace=? AND course_id=? AND document_key=?",
+                (self.namespace, course_id, document_key)).fetchone()
+        return [dict(row) for row in rows], dict(state) if state else None
+
+    def _retain_served_version(self, course_id, row, previous, payload, attempt):
+        """Keep the replaced version searchable until its replacement is ready.
+
+        Called before a usable document is overwritten. Only a different chunk
+        input is a replacement. The outgoing version is stored only if it is fully
+        chunked and embedded; otherwise any older ready copy is kept unchanged.
+        """
+        from backend.app.chunking_service import chunk_input_hash
+        incoming = self._decode({'document_json': json.dumps(payload), 'attempt_json': json.dumps(attempt)})
+        if not incoming['content_usable'] or chunk_input_hash(incoming) == chunk_input_hash(previous):
+            return
+        rows, state = self._document_chunk_rows(course_id, previous['document_key'])
+        if not self._chunk_set_ready(previous, rows, state, self._embedded_hashes(course_id)):
+            return
+        with self._connection() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO document_served_versions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (self.namespace, course_id, previous['document_key'], row['document_json'], row['attempt_json'],
+                 json.dumps(rows), state['input_hash'], state['chunker_version'], datetime.now(timezone.utc).isoformat()))
+
+    def _apply_served_versions(self, course_id, documents, configuration=None):
+        """Substitute a retained ready version while a replacement is not yet searchable.
+
+        Never substitutes for a hard-blocked current document (revoked, removed,
+        unavailable, superseded or invalid), so inaccessible material stays hidden.
+        """
+        stored = {row['document_key']: row for row in self._served_version_rows(course_id)}
+        if not stored:
+            return documents
+        from backend.app import chunking_service
+        embedded = self._embedded_hashes(course_id, configuration)
+        result = []
+        for document in documents:
+            retained = stored.get(document['document_key'])
+            if retained is None or document.get('cache_blocked') or retained['chunker_version'] != chunking_service.CHUNKER_VERSION:
+                result.append(document)
+                continue
+            rows, state = self._document_chunk_rows(course_id, document['document_key'])
+            if document['content_usable'] and self._chunk_set_ready(document, rows, state, embedded):
+                result.append(document)
+                continue
+            previous = self._decode(retained)
+            previous_rows = [{**chunk, 'course_id': course_id} for chunk in json.loads(retained['chunks_json'])]
+            previous_state = {'input_hash': retained['input_hash'], 'chunker_version': retained['chunker_version'],
+                              'chunk_count': len(previous_rows)}
+            if not previous['content_usable'] or not self._chunk_set_ready(previous, previous_rows, previous_state, embedded):
+                result.append(document)
+                continue
+            # Current identity/provenance/module links, previous searchable text.
+            previous.update({key: document.get(key) for key in ('title', 'url', 'references', 'module_id', 'module_name', 'source_role')
+                             if key in document})
+            previous['served_version'] = 'previous'
+            previous['_served_chunk_rows'] = previous_rows
+            result.append(previous)
+        return result
+
+    def _served_version_rows(self, course_id):
+        """Read retained versions; a database not yet migrated simply has none.
+
+        Read-only stores (for example the live evaluation) skip constructor
+        migrations, so the table may legitimately be missing there.
+        """
+        try:
+            with self._connection() as connection:
+                return connection.execute(
+                    "SELECT * FROM document_served_versions WHERE namespace=? AND course_id=?",
+                    (self.namespace, course_id)).fetchall()
+        except sqlite3.OperationalError as error:
+            if "no such table" in str(error):
+                return []
+            raise
+
+    def prune_served_versions(self, course_id, configuration=None):
+        """Delete retained versions whose replacement is ready, blocked or gone."""
+        keys = [row['document_key'] for row in self._served_version_rows(course_id)]
+        if not keys:
+            return 0
+        current = {doc['document_key']: doc for doc in self._documents(course_id)}
+        embedded = self._embedded_hashes(course_id, configuration)
+        stale = []
+        for key in keys:
+            document = current.get(key)
+            if document is None or document.get('cache_blocked'):
+                stale.append(key)
+                continue
+            rows, state = self._document_chunk_rows(course_id, key)
+            if document['content_usable'] and self._chunk_set_ready(document, rows, state, embedded):
+                stale.append(key)
+        with self._connection() as connection:
+            connection.executemany("DELETE FROM document_served_versions WHERE namespace=? AND course_id=? AND document_key=?",
+                                   [(self.namespace, course_id, key) for key in stale])
+        return len(stale)
 
     def reassess_document_quality(self, course_id):
         """Correct current saved quality metadata without altering source attempts.
@@ -334,10 +583,10 @@ class IngestionStore:
             raise ValueError("No saved course snapshot for this account/course.")
         report = {"changed": 0, "promoted": 0, "unchanged": 0, "skipped": 0}
         with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT * FROM documents WHERE namespace = ? AND course_id = ? AND last_seen_at = ?",
-                (self.namespace, course_id, snapshot["synced_at"]),
-            ).fetchall()
+            rows = [row for row in connection.execute(
+                "SELECT * FROM documents WHERE namespace = ? AND course_id = ?",
+                (self.namespace, course_id),
+            ).fetchall() if visible_in_snapshot(row["last_seen_at"], snapshot)]
             for row in rows:
                 document = self._decode(row)
                 if document["stale"] or document.get("status") not in ("ok", "partial") or document['latest_attempt'].get('status') not in ('ok', 'partial'):
@@ -357,7 +606,7 @@ class IngestionStore:
                     "UPDATE documents SET document_json = ?, attempt_json = ? "
                     "WHERE namespace = ? AND course_id = ? AND document_key = ? AND document_json = ? AND attempt_json = ? AND last_seen_at = ?",
                     (json.dumps(payload), json.dumps(attempt), self.namespace, course_id,
-                     document["document_key"], row["document_json"], row["attempt_json"], snapshot["synced_at"]),
+                     document["document_key"], row["document_json"], row["attempt_json"], row["last_seen_at"]),
                 ).rowcount
                 report["changed"] += changed
                 report["promoted"] += changed * (document["status"] == "partial" and updated["status"] == "ok")
@@ -381,14 +630,17 @@ class IngestionStore:
         attempt = json.loads(row["attempt_json"])
         document["latest_attempt"] = attempt
         mismatch = document.get("status") != attempt.get("status") or document.get("version") != attempt.get("version")
-        blocked = document.get('cache_blocked') or _refresh_block_reason(document, attempt)
+        blocked = _hard_block(document.get('cache_blocked')) or _refresh_block_reason(document, attempt)
         valid = (document.get('status') in ('ok', 'partial') and isinstance(document.get('text'), str)
                  and bool(document['text'].strip()) and not blocked)
-        fallback = valid and _temporary_refresh_failure(attempt)
+        fallback = valid and attempt.get('status') not in ('ok', 'partial') and _preservable_failure(attempt)
+        newer = fallback and any(document.get(field) is not None and attempt.get(field) is not None
+                                 and document[field] != attempt[field] for field in ('version', 'content_hash'))
         document.update(content_status=document.get('status'), refresh_status=attempt.get('status'),
                         content_usable=bool(valid and (not mismatch or fallback)),
                         cache_status='stale_but_usable' if fallback else 'current' if valid and not mismatch else 'unavailable',
-                        cache_blocked=blocked, stale=bool(mismatch and not fallback))
+                        cache_blocked=blocked, stale=bool(mismatch and not fallback),
+                        newer_version_unavailable=bool(newer))
         document['last_successful_refresh'] = document.get('last_successful_refresh')
         document['last_refresh_error'] = ({key: attempt.get(key) for key in ('error_type', 'http_status', 'attempted_at')}
                                           if attempt.get('status') in ('error', 'unavailable') else None)
@@ -424,25 +676,35 @@ class IngestionStore:
                  json.dumps(result), datetime.now(timezone.utc).isoformat()),
             )
 
-    def load_documents(self, course_id, *, readable_only=False):
-        """Read documents seen in the latest sync, never silently resurrect removed ones.
-
-        Records absent during a failed listing remain on disk, but are excluded
-        here until rediscovered. Temporary refresh failures can retain usable
-        cached text; retrieval should use readable_only=True for that decision.
-        """
+    def _documents(self, course_id, *, readable_only=False, served=False, configuration=None):
         snapshot = self.load_course(course_id)
         if not snapshot:
             return []
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM documents WHERE namespace = ? AND course_id = ? AND last_seen_at = ? ORDER BY document_key",
-                (self.namespace, course_id, snapshot["synced_at"]),
+                "SELECT * FROM documents WHERE namespace = ? AND course_id = ? ORDER BY document_key",
+                (self.namespace, course_id),
             ).fetchall()
-        documents = [self._decode(row) for row in rows]
+        documents = [self._decode(row) for row in rows if visible_in_snapshot(row["last_seen_at"], snapshot)]
+        if served:
+            documents = self._apply_served_versions(course_id, documents, configuration)
         if readable_only:
             documents = [doc for doc in documents if doc['content_usable']]
         return documents
+
+    def load_documents(self, course_id, *, readable_only=False, served=False, configuration=None):
+        """Read documents of the published sync generation (plus uncommitted refresh work).
+
+        Records absent from the published sync remain on disk, but are excluded
+        here until rediscovered. Failed refreshes can retain usable cached text;
+        retrieval should use readable_only=True for that decision.
+
+        served=False returns each document's latest state (ingestion/indexing).
+        served=True is the retrieval view: a changed document keeps its previous
+        searchable version until the replacement chunks and embeddings are ready.
+        """
+        documents = self._documents(course_id, readable_only=readable_only, served=served, configuration=configuration)
+        return [{key: value for key, value in doc.items() if key != '_served_chunk_rows'} for doc in documents]
 
     def load_chunk_state(self, course_id, document_key):
         """Read the saved fingerprint/version, including successful empty sets."""
@@ -472,17 +734,18 @@ class IngestionStore:
                  len(chunks), datetime.now(timezone.utc).isoformat()),
             )
 
-    def load_chunks(self, course_id, document_key=None, *, eligible_only=False):
+    def load_chunks(self, course_id, document_key=None, *, eligible_only=False, served=False, configuration=None):
         """Return current readable chunks with fresh parent identity and provenance.
 
         Old chunks may remain on disk after lost access or a failed refresh, but
         never escape this reader. New text/settings require a matching rebuild.
+        served=True uses the retrieval view described in load_documents().
         """
         from backend.app import chunking_service
 
         documents = {
             document["document_key"]: document
-            for document in self.load_documents(course_id, readable_only=True)
+            for document in self._documents(course_id, readable_only=True, served=served, configuration=configuration)
             if document_key is None or document["document_key"] == document_key
         }
         fingerprints = {key: chunking_service.chunk_input_hash(doc) for key, doc in documents.items()}
@@ -493,6 +756,11 @@ class IngestionStore:
                 "SELECT * FROM document_chunks WHERE namespace = ? AND course_id = ? ORDER BY document_key, chunk_index",
                 (self.namespace, course_id),
             ).fetchall()
+        retained = {key for key, doc in documents.items() if '_served_chunk_rows' in doc}
+        rows = [row for row in rows if row["document_key"] not in retained]
+        for key in sorted(retained):
+            rows.extend(documents[key].pop('_served_chunk_rows'))
+        rows.sort(key=lambda row: (row["document_key"], row["chunk_index"]))
         chunks = []
         for row in rows:
             key = row["document_key"]
@@ -505,6 +773,7 @@ class IngestionStore:
                 "module_id", "module_name", "references", "source_role", "status", "warnings", "extractor_version",
                 "content_hash",
                 "cache_status", "refresh_status", "last_successful_refresh", "last_refresh_error",
+                "newer_version_unavailable", "served_version",
             )})
             chunk["original_filename"] = (document.get("metadata") or {}).get("filename") or document.get("title")
             chunk["locations"] = json.loads(row["locations_json"])
@@ -518,14 +787,15 @@ class IngestionStore:
             chunks.append(chunk)
         return chunks
 
-    def load_embedding_inputs(self, course_id):
+    def load_embedding_inputs(self, course_id, *, served=False, configuration=None):
         """Group eligible exact text within this account/course; retain every origin.
 
         This only prepares text/metadata, and never creates or stores embeddings.
         Template quality is retained per source for later policy filtering.
+        Indexing uses the latest view; retrieval passes served=True.
         """
         groups = {}
-        for chunk in self.load_chunks(course_id, eligible_only=True):
+        for chunk in self.load_chunks(course_id, eligible_only=True, served=served, configuration=configuration):
             key = chunk["embedding_reuse_key"]
             group = groups.setdefault(key, {
                 "embedding_reuse_key": key, "text_hash": chunk["text_hash"],

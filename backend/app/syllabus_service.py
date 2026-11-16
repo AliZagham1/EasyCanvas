@@ -111,4 +111,9 @@ def ingest_syllabus_documents(snapshot, store, *, force=False, max_files=None):
             document.update(status="unavailable" if status in (403, 404) else "error", http_status=status,
                             error_type=type(error).__name__, text="", pages=[])
             action = "failed"
+        except Exception as error:
+            # An unexpected extractor defect affects only this syllabus document.
+            document.update(status="error", http_status=None, error_type=type(error).__name__,
+                            error_category="processing_error", text="", pages=[])
+            action = "failed"
         yield document, action, downloaded

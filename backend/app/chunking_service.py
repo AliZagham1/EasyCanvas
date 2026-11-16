@@ -175,16 +175,34 @@ def ensure_course_chunks(course_id, store):
         raise ValueError("course_id must be a positive integer.")
     report = {"processed": 0, "reused": 0, "chunks": 0}
     for document in store.load_documents(course_id, readable_only=True):
-        fingerprint = chunk_input_hash(document)
-        state = store.load_chunk_state(course_id, document["document_key"])
-        if state and state["input_hash"] == fingerprint and state["chunker_version"] == CHUNKER_VERSION:
-            report["reused"] += 1
-            report["chunks"] += state["chunk_count"]
-            continue
-        chunks = chunk_document(document)
-        store.save_chunks(course_id, document["document_key"], fingerprint, CHUNKER_VERSION, chunks)
-        report["processed"] += 1
-        report["chunks"] += len(chunks)
+        _chunk_one(course_id, store, document, report)
+    store.prune_served_versions(course_id)
+    return report
+
+
+def _chunk_one(course_id, store, document, report):
+    fingerprint = chunk_input_hash(document)
+    state = store.load_chunk_state(course_id, document["document_key"])
+    if state and state["input_hash"] == fingerprint and state["chunker_version"] == CHUNKER_VERSION:
+        report["reused"] += 1
+        report["chunks"] += state["chunk_count"]
+        return
+    chunks = chunk_document(document)
+    store.save_chunks(course_id, document["document_key"], fingerprint, CHUNKER_VERSION, chunks)
+    report["processed"] += 1
+    report["chunks"] += len(chunks)
+
+
+def ensure_document_chunks(course_id, store, document_key):
+    """Chunk one just-saved document so a replacement is prepared during the sync.
+
+    Uses the latest (not served) state. A retained previous version keeps serving
+    retrieval until these chunks and their embeddings are ready.
+    """
+    report = {"processed": 0, "reused": 0, "chunks": 0}
+    document = store.load_document(course_id, document_key)
+    if document and document["content_usable"]:
+        _chunk_one(course_id, store, document, report)
     return report
 
 

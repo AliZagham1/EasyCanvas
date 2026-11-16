@@ -426,18 +426,40 @@ class AdditionalRoutingTests(RoutingFixture, unittest.TestCase):
             result = self.route("what is due tomorrow", self.plan("due tomorrow", "get_deadline", deadline_reference="tomorrow"))
         self.assertEqual(result["resolved_assignments"], [106, 101])
 
-    def test_refreshing_course_does_not_report_known_files_as_missing(self):
+    def test_refreshing_course_answers_from_saved_material_with_notice(self):
+        # EC-012: a sync in progress no longer refuses document questions.
+        self.store.save_course({**self.snapshot, "refresh": {"status": "running", "synced_at": "later"}})
+        result = self.route("explain Practice Questions 10", self.plan("Practice Questions 10", "explain_document", document_reference="Practice Questions 10"))
+        self.assertNotIn("notice", result)
+        self.assertEqual(result["retrieval_route"], "document_material")
+        self.assertTrue(result["results"])
+        self.assertIn("last completed sync", result["material_notice"])
+
+    def test_unfinished_sync_notice_and_first_sync_notice(self):
+        self.store.save_course({**self.snapshot, "refresh": {"status": "failed", "synced_at": "later"}})
+        result = self.route("explain Practice Questions 10", self.plan("Practice Questions 10", "explain_document", document_reference="Practice Questions 10"))
+        self.assertIn("did not finish", result["material_notice"])
         self.store.save_course({**self.snapshot, "ingestion_status": "running"})
         result = self.route("explain Practice Questions 10", self.plan("Practice Questions 10", "explain_document", document_reference="Practice Questions 10"))
-        self.assertEqual(result["notice_status"], "indexing_needed")
-        self.assertIn("being refreshed", result["notice"])
-        self.assertFalse(self.embedding.calls)
+        self.assertIn("may not be available yet", result["material_notice"])
 
     def test_structured_rubric_remains_available_during_document_refresh(self):
-        self.store.save_course({**self.snapshot, "ingestion_status": "running"})
+        self.store.save_course({**self.snapshot, "refresh": {"status": "running", "synced_at": "later"}})
         result = self.route("Iteration 3 Presentation rubric", self.plan("Iteration 3 Presentation", "explain_rubric", assignment_reference="Iteration 3 Presentation"))
         self.assertEqual(result["retrieval_route"], "saved_assignment_rubric")
         self.assertEqual(len(result["results"]), 4)
+        # The rubric is saved (not live) data, so it says so during a sync.
+        self.assertIn("last completed sync", result["material_notice"])
+
+    def test_live_facts_during_refresh_are_fetched_fresh_without_saved_material_notice(self):
+        self.store.save_course({**self.snapshot, "refresh": {"status": "running", "synced_at": "later"}})
+        live = {**self.assignments[0]["metadata"], "due_at": "2026-12-01T17:00:00Z"}
+        with patch.object(canvas_service, "get_assignment", return_value=live) as fetch:
+            result = self.route("when is HW1 due", self.plan("HW1", "get_deadline", assignment_reference="HW1"))
+        fetch.assert_called_once()
+        self.assertEqual(result["retrieval_route"], "current_assignment_facts")
+        self.assertEqual(result["results"][0]["structured_data"]["due_at"], "2026-12-01T17:00:00Z")
+        self.assertNotIn("material_notice", result)
 
     def test_model_changed_question_number_is_rejected(self):
         result = self.route("explain question 7 from Practice Questions 10", self.plan("question 8", "explain_question",

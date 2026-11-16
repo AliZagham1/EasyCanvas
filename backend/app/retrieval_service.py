@@ -58,7 +58,7 @@ def search_course(course_id, question, *, store=None, provider=None, configurati
     if snapshot is None:
         raise ValueError("No saved course snapshot for this account/course.")
     resolution = None
-    documents = store.load_documents(course_id)
+    documents = store.load_documents(course_id, served=True, configuration=configuration)
     modules = snapshot.get('modules') if isinstance(snapshot, dict) else None
     catalog = module_catalog(documents, modules)
     if document_keys is None:
@@ -68,7 +68,7 @@ def search_course(course_id, question, *, store=None, provider=None, configurati
             return _reference_failure(course_id, resolution)
     document_keys = set(document_keys or [])
     inputs = []
-    for item in store.load_embedding_inputs(course_id):
+    for item in store.load_embedding_inputs(course_id, served=True, configuration=configuration):
         sources = [{**source, 'module_names': document_module_names(source, catalog)} for source in item["sources"] if source["source_quality"]["policy_retrieval_eligible"]
                    and (not document_keys or source["document_key"] in document_keys)]
         if sources:
@@ -124,7 +124,7 @@ def retrieve_evidence(course_id, question, *, store=None, provider=None, focus_d
         raise ValueError("Question must be nonblank and at most 8,000 UTF-8 bytes.")
     store = store or default_store()
     configuration = provider.configuration if provider else EmbeddingConfiguration()
-    documents = store.load_documents(course_id)
+    documents = store.load_documents(course_id, served=True, configuration=configuration)
     snapshot = store.load_course(course_id) or {}
     modules = snapshot.get('modules') if isinstance(snapshot, dict) else None
     catalog = module_catalog(documents, modules)
@@ -160,7 +160,7 @@ def retrieve_evidence(course_id, question, *, store=None, provider=None, focus_d
         return report
     embeddings = store.load_embeddings(course_id, configuration)
     available, searchable = [], 0
-    for item in store.load_embedding_inputs(course_id):
+    for item in store.load_embedding_inputs(course_id, served=True, configuration=configuration):
         origins = [{**origin, 'module_names': document_module_names(origin, catalog)} for origin in item["sources"] if origin["source_quality"]["policy_retrieval_eligible"]
                    and (not scope or origin["document_key"] in scope)]
         if origins:

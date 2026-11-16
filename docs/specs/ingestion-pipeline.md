@@ -176,26 +176,97 @@ history keep an unknown timestamp. The compatibility `stale` exclusion flag
 remains true for unusable mismatches, not for usable transient-failure fallback.
 Read-derived fields are not copied back into stored attempts.
 
-Confirmed 401/403/404/410 responses, locked access, known changed versions/bytes,
-parser/TLS/unknown processing failures and invalid cached text do not qualify for
-temporary fallback. A `cache_blocked` marker persists confirmed invalidation
-through later network failures; only successful processing clears it. Text may
+Since EC-012, every failed refresh that does not show the saved text is
+inaccessible or replaced keeps the last good extraction usable as
+`stale_but_usable`. That covers network/retryable HTTP failures, parser, TLS and
+unexpected processing errors (`error_category: processing_error`), and a changed
+file that could not be fetched or processed. When Canvas reports a newer version
+that could not be processed, `newer_version_unavailable` is true. Answers citing
+such a source say it is not the current version.
+
+These hide saved text (`cache_blocked`) and are never overridden by fallback:
+
+- `access_revoked`: HTTP 401/403 or `locked_for_user`.
+- `removed`: HTTP 404/410.
+- `access_unavailable`: another Canvas-reported unavailable state, such as a
+  missing native body.
+- `superseded`: the newest content was processed successfully but has no
+  readable text (no text, unsupported, encrypted).
+- `invalid_content`: damaged saved text.
+
+The marker persists through later network failures; only successful processing
+clears it. Older databases may contain the retired reasons
+`processing_unavailable`/`changed_content`; they no longer block content. Text may
 remain on disk for diagnosis while retrieval excludes it. A later successful
 download or conditional validation clears refresh errors normally. A successful
 unchanged Canvas metadata check can reuse the saved extraction without another
 binary download. No DNS configuration, allowlist or credential handling changes.
-Documents not rediscovered in the latest sync remain saved but are excluded from
-the current-document list. Nothing is silently declared deleted after a 403.
+Documents not rediscovered in the published sync remain saved but are excluded
+from the current-document list. Nothing is silently declared deleted after a 403.
 
-Future retrieval should use `store.load_documents(course_id, readable_only=True)`:
-this excludes unusable stale, unavailable, unsupported, and empty results while
-allowing valid transient-failure caches. Partial text
-remains usable with its limitations and page/cell metadata preserved.
+Retrieval uses `store.load_documents(course_id, readable_only=True, served=True)`
+(and the same `served=True` flag on `load_chunks`/`load_embedding_inputs`). This
+excludes unusable, unavailable, unsupported and empty results while allowing
+preserved caches. Partial text remains usable with its limitations and page/cell
+metadata preserved. Ingestion, chunking and indexing use the default latest view.
+
+## Sync generations (EC-012)
+
+A course's published snapshot (`synced_at`, assignments, modules, rubrics) stays
+authoritative until a sync commits:
+
+1. **Start, before discovery.** Before contacting Canvas, `ingest_course()` writes
+   `refresh: {status: running, phase: discovery, synced_at: null, started_at}` onto
+   the published snapshot instead of replacing it. Once `sync_course()` returns,
+   the marker moves to `phase: processing` with the new generation's `synced_at`.
+   Discovery usually takes about half of each course's sync time, so answers carry
+   the sync notice from the moment a course's sync begins. A first-ever sync has
+   nothing to keep and uses `ingestion_status: running` once discovery finishes. If
+   that first discovery fails, nothing is saved.
+2. **Visibility during the sync.** While a refresh is running, failed or
+   interrupted, `load_documents()` shows documents stamped with the published
+   generation or with any later uncommitted refresh. Each document key has one
+   row, so nothing is duplicated, and confirmed access loss still hides a
+   document as soon as it is saved. Documents last seen before the published
+   sync stay excluded.
+3. **Commit.** Only a successful finish publishes the new snapshot and removes the
+   marker. Documents the new sync did not rediscover stop being current at
+   that moment, not before.
+4. **Failure and interruption.** An exception marks the refresh `failed`, and
+   `KeyboardInterrupt` marks it `interrupted`, in either phase; a Canvas discovery
+   outage therefore also produces the "did not finish" notice. The error is still
+   raised for the worker. Published plus already-refreshed material stays visible until the next
+   successful sync. A failed sync also queues indexing for replacements prepared
+   before the failure.
+5. **Worker recovery.** On startup the lock-holding worker marks markers left
+   `running` by a killed process as `interrupted` before index recovery.
+6. **Per-file isolation.** An unexpected exception while processing one native
+   record, file or syllabus document becomes that document's
+   `processing_error`; the course continues. `KeyboardInterrupt` is not caught.
+
+**Previous searchable version.** Ingestion chunks each document as soon as it is
+saved (`ensure_document_chunks`). When a usable document's chunk input changes,
+`save_document()` first copies the outgoing version into
+`document_served_versions`, but only if it is fully chunked and embedded.
+
+The served view keeps answering from that copy, labelled
+`served_version: previous`, until the replacement's chunks and every eligible
+embedding exist. It keeps the current title, URL and module provenance. It never
+substitutes for a hard-blocked document.
+
+Copies are pruned after successful indexing, at commit and during chunking.
+Indexing status counts the latest (replacement) work, so pending passages stay
+visible. With automatic updates OFF, the previous version keeps serving until
+Update course search runs.
+
+A chunker-version change still rebuilds every set without a previous copy. That
+is developer-initiated and out of scope for EC-012.
 
 ## Document chunking
 
-After `ingest_course()` saves extracted documents, it calls
-`ensure_course_chunks(course_id, store)` in the existing ingestion worker. The
+`ingest_course()` chunks each document right after saving it
+(`ensure_document_chunks`), then calls `ensure_course_chunks(course_id, store)` as
+a final backfill in the existing ingestion worker. The
 dashboard's essential requests remain separate. Chunking reads SQLite; it never
 downloads files, runs notebook code, or calls an AI model.
 
@@ -672,8 +743,9 @@ HTTPS, no redirects, timeouts, a 50 MiB stream limit, and document-signature che
 The existing PDF/DOCX extractors preserve pages/Word blocks. ETag/Last-Modified
 conditional GETs reuse unchanged text, chunks, and embeddings. A source without
 validators must be downloaded to compare its byte hash. Failures preserve old
-text on disk. Temporary refresh failures keep valid cached content searchable;
-confirmed loss of access, removal, invalid content or known changes still block it.
+text on disk. Failed refreshes keep valid cached content searchable (marked not
+current); confirmed loss of access, removal, invalid content or an unreadable
+successful replacement still block it (EC-012).
 
 Documents use `syllabus_file:<URL SHA-256>` identity within the existing account /
 course boundary and retain the native syllabus record/page and download URL in

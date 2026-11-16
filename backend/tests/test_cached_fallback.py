@@ -142,17 +142,56 @@ class CacheStateTests(unittest.TestCase):
         self.assertFalse(current['content_usable'])
         self.assertEqual(self.store.load_embedding_inputs(42),[])
 
-    def test_confirmed_remote_change_does_not_silently_serve_old_version(self):
+    def test_confirmed_remote_change_keeps_last_good_version_marked_not_current(self):
+        # EC-012 decision: a changed file that could not be fetched/processed keeps
+        # its last good extraction searchable, explicitly marked as outdated.
         current = self.fail(version='v2',error_type='Timeout')
-        self.assertEqual(current['cache_blocked'],'changed_content')
-        self.assertFalse(current['content_usable'])
-        self.assertFalse(self.fail(version=None)['content_usable'])
+        self.assertIsNone(current['cache_blocked'])
+        self.assertTrue(current['content_usable'])
+        self.assertEqual(current['cache_status'],'stale_but_usable')
+        self.assertTrue(current['newer_version_unavailable'])
+        self.assertTrue(self.store.load_chunks(42)[0]['newer_version_unavailable'])
+        self.assertTrue(self.fail(version=None)['content_usable'])
 
-    def test_unknown_parser_tls_and_invalid_content_failures_are_not_network_fallback(self):
-        for kind in ('ValueError','PdfReadError','SSLError','MissingBody'):
+    def test_processing_failures_keep_last_good_text_but_confirmed_unavailability_blocks(self):
+        # EC-012 decision: parser, TLS and unexpected processing failures are not
+        # evidence that the saved text is inaccessible or replaced.
+        for kind in ('ValueError','PdfReadError','SSLError','KeyError'):
             with self.subTest(kind=kind):
                 self.store.save_document(42,self.document,'fixed')
-                self.assertFalse(self.fail(error_type=kind)['content_usable'])
+                current = self.fail(error_type=kind)
+                self.assertTrue(current['content_usable'])
+                self.assertEqual(current['cache_status'],'stale_but_usable')
+                self.assertFalse(current['newer_version_unavailable'])
+        self.store.save_document(42,self.document,'fixed')
+        current = self.fail(error_type='MissingBody', status='unavailable')
+        self.assertFalse(current['content_usable'])
+        self.assertEqual(current['cache_blocked'],'access_unavailable')
+        self.assertEqual(self.store.load_chunks(42),[])
+
+    def test_successful_unreadable_replacement_hides_old_text(self):
+        current = self.fail(status='no_text', version='v2', error_type=None)
+        self.assertEqual(current['cache_blocked'],'superseded')
+        self.assertFalse(current['content_usable'])
+        self.assertEqual(self.store.load_chunks(42, served=True),[])
+        self.assertFalse(self.fail()['content_usable'])  # A later timeout cannot resurrect it.
+
+    def test_legacy_soft_block_reasons_no_longer_hide_preserved_text(self):
+        import json
+        for reason in ('processing_unavailable', 'changed_content'):
+            with self.subTest(reason=reason):
+                self.store.save_document(42,self.document,'fixed')
+                self.fail()
+                with self.store._connection() as c:
+                    payload = json.loads(c.execute('SELECT document_json FROM documents WHERE document_key=?',('file:9',)).fetchone()[0])
+                    payload['cache_blocked'] = reason
+                    c.execute('UPDATE documents SET document_json=? WHERE document_key=?',(json.dumps(payload),'file:9'))
+                self.assertTrue(self.store.load_document(42,'file:9')['content_usable'])
+        with self.store._connection() as c:
+            payload = json.loads(c.execute('SELECT document_json FROM documents WHERE document_key=?',('file:9',)).fetchone()[0])
+            payload['cache_blocked'] = 'access_revoked'
+            c.execute('UPDATE documents SET document_json=? WHERE document_key=?',(json.dumps(payload),'file:9'))
+        self.assertFalse(self.store.load_document(42,'file:9')['content_usable'])
 
     def test_successful_changed_content_replaces_chunks_and_reuses_only_matching_vectors(self):
         old_success = self.store.load_document(42,'file:9')['last_successful_refresh']

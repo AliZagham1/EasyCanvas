@@ -10,6 +10,7 @@ from backend.app.document_reference_service import (
     resolve_assignment_reference, resolve_document_reference, document_role, numbered_references, name_tokens,
 )
 from backend.app.embedding_service import default_store
+from backend.app.ingestion_store import material_refresh
 from backend.app.llm_service import LLMProviderError
 from backend.app.query_understanding_service import validate_understanding
 from backend.app.clarification_service import candidate_state, FACT_INTENTS
@@ -67,6 +68,27 @@ def _notice(course_id, plan, message, *, clarify=False, route="clarification", s
     return {"course_id": course_id, "status": "no_content", "results": [], "resolved_documents": [],
             "query_understanding": plan, "retrieval_route": route, "notice": message,
             "notice_status": status or ("clarification_needed" if clarify else "insufficient_context")}
+
+
+GENERIC_MATERIAL_WORDS = {
+    "slide", "slides", "deck", "lecture", "lectures", "notes", "note", "material", "materials", "reading", "readings",
+    "handout", "handouts", "presentation", "presentations", "powerpoint", "powerpoints", "pdf", "pdfs", "document",
+    "documents", "file", "files", "course", "class", "content", "my", "our", "the", "this", "these", "those", "from",
+    "in", "on", "of", "for", "to", "according", "all",
+}
+
+
+def _generic_material_reference(reference, snapshot):
+    """True when a document reference only describes the course's material in general.
+
+    Words may come only from a small descriptor list and the selected course's own
+    code/name. Any other word or number (a title word, "Lecture 7") is specific,
+    so an unmatched specific reference still reports a missing document.
+    """
+    metadata = snapshot.get("course", {}).get("metadata", {})
+    course_words = set(name_tokens((metadata.get("course_code") or "") + " " + (metadata.get("name") or "")))
+    words = set(name_tokens(reference))
+    return bool(words) and words <= GENERIC_MATERIAL_WORDS | course_words
 
 
 def _selected_course(reference, snapshot):
@@ -205,7 +227,39 @@ def _retain_assignment_instructions(result, course_id, records, docs, snapshot):
     return attach_instructions(result, course_id, records, docs, instruction_keys)
 
 
+MATERIAL_ROUTES = {"course_material", "course_policy_material", "assignment_material", "document_material",
+                   "saved_assignment_rubric"}
+
+
+def material_notice(snapshot):
+    """Explain that saved (not live) material answers while a sync is unfinished."""
+    refresh = material_refresh(snapshot)
+    if not refresh:
+        return None
+    if refresh["state"] == "running":
+        return ("Canvas sync is in progress. This answer uses course material saved by the last completed sync."
+                if refresh["previous_material"] else
+                "Canvas sync is in progress. Some course material may not be available yet.")
+    return "The latest Canvas sync did not finish. This answer uses previously saved course material."
+
+
 def route_query(course_id, question, understanding, *, store=None, provider=None, conversation_context=None, now=None):
+    """Route one turn; saved-material answers say when a sync is unfinished.
+
+    Live Canvas fact routes (deadlines, points, submission status, lists) are
+    fetched fresh and never carry the saved-material notice.
+    """
+    store = store or default_store()
+    result = _route_query(course_id, question, understanding, store=store, provider=provider,
+                          conversation_context=conversation_context, now=now)
+    if result.get("retrieval_route") in MATERIAL_ROUTES and not result.get("notice"):
+        notice = material_notice(store.load_course(course_id))
+        if notice:
+            result = {**result, "material_notice": notice}
+    return result
+
+
+def _route_query(course_id, question, understanding, *, store=None, provider=None, conversation_context=None, now=None):
     """Resolve real course records, then select one retrieval route.
 
     Deadline/submission/points routes always refresh Canvas regardless of the
@@ -232,7 +286,6 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
                           'explain_document', 'find_course_material', 'explain_assignment'):
         plan = _correct_standalone_concept(question, plan)
         intent = plan['intent']
-    material_updating = snapshot.get("ingestion_status") == "running"
     if not _selected_course(plan['course_reference'], snapshot):
         return _notice(course_id, plan, 'Please select the course named in your question.', clarify=True)
     if intent == 'general_concept':
@@ -247,9 +300,6 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
     # Course-wide knowledge still uses the existing course-scoped search.
     if (intent == "course_wide_question" and not _course_policy_request(question, intent)
             and not plan["assignment_reference"] and not plan["document_reference"] and not plan["course_reference"]):
-        if material_updating:
-            return _notice(course_id, plan, "This course's saved material is being refreshed. Please retry shortly.",
-                           route="course_material_refresh", status="indexing_needed")
         options = {"focus_documents": focus} if focus else {}
         result = retrieval_service.retrieve_evidence(course_id, plan["query"], store=store, provider=provider, **options)
         return {**result, "query_understanding": plan, "retrieval_route": "course_material"}
@@ -306,7 +356,7 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
         return _assignment_choices(course_id, plan, [a for a in assignments if a['canvas_id'] in resolution['candidate_ids']])
     if plan['clarification']:
         return _notice(course_id, plan, plan['clarification'], clarify=True)
-    docs = store.load_documents(course_id)
+    docs = store.load_documents(course_id, served=True)
     now = now or datetime.now(timezone.utc)
     zone = structured.course_timezone(snapshot)
     direct = intent in ("get_deadline", "get_submission_status", "get_assignment_details")
@@ -378,9 +428,6 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
                 "resolved_documents": [f"assignment:{a['canvas_id']}" for a in selected_records or [record]],
                 "resolved_assignments": [a['canvas_id'] for a in selected_records or [record]],
                 "query_understanding": plan, "retrieval_route": "saved_assignment_rubric"}
-    if material_updating:
-        return _notice(course_id, plan, "This course's saved material is being refreshed. Please retry shortly.",
-                       route="course_material_refresh", status="indexing_needed")
     if _course_policy_request(question, intent):
         syllabus_keys = _syllabus_documents(docs)
         explicit = resolve_document_reference(plan['document_reference'], docs, modules=snapshot.get('modules')) if plan['document_reference'] else None
@@ -427,6 +474,12 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
     if original["document_keys"]:
         explicit = original
     if plan["document_reference"] and explicit["status"] == "none":
+        if _generic_material_reference(plan["document_reference"], snapshot):
+            # "my CSE 3320 slides" describes course material, not one named file:
+            # search the selected course instead of reporting a missing document.
+            options = {"focus_documents": focus} if focus else {}
+            result = retrieval_service.retrieve_evidence(course_id, plan["query"], store=store, provider=provider, **options)
+            return {**result, "query_understanding": plan, "retrieval_route": "course_material"}
         return _notice(course_id, plan, "I could not find that document in this course.")
     if explicit["status"] in ("unresolved", "ambiguous"):
         return _notice(course_id, plan, "Please specify the document title." if explicit["status"] == "ambiguous"

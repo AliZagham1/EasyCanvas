@@ -211,6 +211,8 @@ def _validate_answer(answer, source_ids):
 def _prepare_context(course_id, retrieval, limit=5, question=None):
     """Build a turn-local evidence map using only backend-owned source metadata."""
     warnings = []
+    if retrieval.get("material_notice"):
+        warnings.append(retrieval["material_notice"])
     if retrieval["status"] == "partial":
         warnings.append("The course index is incomplete; answers use only indexed material.")
     coverage = retrieval.get("evidence_coverage")
@@ -221,7 +223,7 @@ def _prepare_context(course_id, retrieval, limit=5, question=None):
               "warnings": warnings, "retrieval_status": retrieval["status"],
               "model": None, "usage": None,
               "resolved_documents": retrieval.get("resolved_documents", [])}
-    for key in ("query_understanding", "retrieval_route", "resolved_assignments", "clarification_candidates", "excluded_assignment_ids", "assignment_policy"):
+    for key in ("query_understanding", "retrieval_route", "resolved_assignments", "clarification_candidates", "excluded_assignment_ids", "assignment_policy", "material_notice"):
         if key in retrieval:
             report[key] = retrieval[key]
     if coverage:
@@ -250,7 +252,10 @@ def _prepare_context(course_id, retrieval, limit=5, question=None):
                 'index_status': {key: retrieval.get(key) for key in ('searchable_inputs', 'indexed_inputs', 'missing_inputs')}}, [], {}
     if retrieval["status"] == "no_content":
         return {**report, "answer": "I could not find usable saved course material to answer this question."}, [], {}
-    scope_warnings = list(warnings)
+    # Passage limitations are evidence context for the answer model. The sync
+    # notice is a backend/UI message about saved material, not a property of the
+    # evidence; sending it lets the model echo a near-duplicate warning (EC-012).
+    scope_warnings = [warning for warning in warnings if warning != retrieval.get("material_notice")]
     sources, context, groups = {}, [], {}
     for item in retrieval["results"][:limit]:
         origins = [origin for origin in item["sources"]
@@ -293,7 +298,7 @@ def _finish_answer(report, response, sources, question=None):
     if question is not None and answer['status'] == 'answered':
         used_ids = {sid for block in answer['blocks'] for sid in block['source_ids']}
         # Keep index/coverage limits, then calculate extraction warnings from cited sources.
-        scoped = []
+        scoped = [report['material_notice']] if report.get('material_notice') else []
         if report['retrieval_status'] == 'partial':
             scoped.append('The course index is incomplete; answers use only indexed material.')
         coverage = report.get('evidence_coverage')

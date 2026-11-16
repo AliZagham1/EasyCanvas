@@ -316,7 +316,10 @@ class SavedOverviewTests(unittest.TestCase):
         self.save(boundary_document())
         self.store.save_document(42, {"document_key": "file:10", "version": "new", "status": "error", "text": ""}, "now")
         self.assertEqual(reassess_saved_course(42, self.store)["skipped"], 1)
-        self.assertTrue(self.store.load_document(42, "file:10")["stale"])
+        current = self.store.load_document(42, "file:10")
+        # EC-012: the failed attempt is kept; the last good text stays usable but not current.
+        self.assertEqual(current["refresh_status"], "error")
+        self.assertEqual(current["cache_status"], "stale_but_usable")
 
     def test_reassessment_cannot_cross_account_or_course(self):
         self.save(boundary_document())

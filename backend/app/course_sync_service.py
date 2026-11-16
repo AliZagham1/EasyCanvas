@@ -67,6 +67,9 @@ def run_worker(store, interval, parent_pid=None):
         return
     try:
         try:
+            # A killed worker cannot record its own interruption; the next lock
+            # holder does, before index recovery queues the refreshed material.
+            store.recover_interrupted_refreshes()
             recover_jobs(store)
             state = store.load_sync_state()
             if not state or state["status"] != "queued":

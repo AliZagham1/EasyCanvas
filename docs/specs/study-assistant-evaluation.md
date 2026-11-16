@@ -56,7 +56,7 @@ python3 -m unittest backend.tests.test_assistant_evaluation
 python3 -m backend.evaluation.run --mode offline
 ```
 
-The offline evaluation contains 228 observations:
+The offline evaluation contains 231 observations:
 
 - 40 declared query-contract checks
 - 40 actual routing/retrieval checks with fake vectors and structured Canvas reads
@@ -70,9 +70,9 @@ The offline evaluation contains 228 observations:
 - 20 module/document matching tests, including aliases, exact numbers, role
   separation, ambiguity, direct-link priority, follow-ups, current labels,
   provenance, indexing state and account/course isolation
-- 20 conversation-intelligence/persistence/depth checks
+- 21 conversation-intelligence/persistence/depth checks
 - 4 history API checks, including creation, reopening, isolation and safe failures
-- 14 cached-content fallback checks covering network failures, revocation,
+- 16 cached-content fallback checks covering network/processing failures, revocation,
   invalid content, recovery, unchanged vectors and course/account isolation
 - 15 policy/control-character checks, including deliberately violating fake answers
 - 13 conversation rename/delete, schema-migration and management API checks

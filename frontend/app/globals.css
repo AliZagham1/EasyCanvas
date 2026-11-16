@@ -292,6 +292,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .conversation-markdown blockquote { border-left: 1px solid var(--border); padding-left: 16px; color: var(--muted); }
 .conversation-markdown table { display: block; overflow-x: auto; border-collapse: collapse; margin-block: 12px; }
 .conversation-markdown th, .conversation-markdown td { padding: 8px 12px; border: 1px solid var(--border); text-align: left; }
+.conversation-basis { display: inline-block; margin-bottom: 10px; padding: 1px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.conversation-material-notice { margin-top: 16px; padding-left: 10px; border-left: 2px solid var(--border); color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .conversation-citations { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .conversation-citations .text-link { font-size: 13px; }
 .conversation-sources { font-size: 13px; color: var(--muted); margin-top: 20px; }

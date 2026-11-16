@@ -24,9 +24,34 @@ def entity_matches(reference, records, active=()):
     return matches
 
 
+def has_conversation_context(context):
+    """True when deterministic state gives a turn something to continue."""
+    context = context or {}
+    return bool(context.get('recent_turns') or context.get('active_documents') or context.get('active_assignments')
+                or context.get('pending_clarification') or context.get('clarification_selection'))
+
+
+def reject_unsupported_continuation(plan, context):
+    """A model cannot continue a conversation that has nothing to continue (EC-014).
+
+    With no previous turns, active documents/assignments or pending clarification,
+    a provider's `continue`/`use_active_documents` claim becomes a topic switch.
+    Student-written references and every other plan field are kept unchanged, so
+    the EC-003 guard can still drop only model-added references.
+    """
+    if has_conversation_context(context) or not (plan['operation'] == 'continue' or plan['use_active_documents']):
+        return plan
+    corrected = copy.deepcopy(plan)
+    corrected['use_active_documents'] = False
+    if corrected['operation'] == 'continue':
+        corrected['operation'] = 'topic_switch'
+    return corrected
+
+
 def interpret_turn(question, plan, context):
     """Preserve operations that the provider may omit, without changing entity IDs."""
-    plan = copy.deepcopy(plan)
+    context = context or {}
+    plan = reject_unsupported_continuation(copy.deepcopy(plan), context)
     state = context.get('conversation_state') or {}
     text = question.casefold().strip()
     prior = state.get('current_intent')

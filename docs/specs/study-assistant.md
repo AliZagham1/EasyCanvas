@@ -48,7 +48,49 @@ titles. `retrieval_router.py` selects a route after understanding:
 | Named document overview | Existing ordered document coverage and continuation handling, within context bounds. |
 | Focused question | Existing semantic retrieval inside resolved material, with bounded neighbors. |
 | General course knowledge | Existing selected-course semantic retrieval. |
+| Generic course-material reference ("my CSE 3320 slides", "lecture notes") | Selected-course semantic retrieval (EC-013), not a missing-document notice. |
+| Standalone concept (`general_concept`) | Uncited general knowledge, marked `answer_basis: general_knowledge`. |
 | Study plan | Recognized, but clearly reported as not implemented. No schedule is invented. |
+
+### General knowledge versus course material (EC-013)
+
+A selected course does not force every concept question through RAG. The router
+accepts `general_concept` only for a self-contained topic switch with no course,
+assignment, document, number, deadline or "my/our/this course" wording
+(`_general_concept_allowed`). A general follow-up such as "give me an example" can
+stay general only after a general answer, with no active course documents.
+Model-added course references that the student did not write are ignored
+(EC-003). Anything else, including a misclassified `general_concept` with course
+wording, is routed to course retrieval.
+
+General knowledge is never a fallback for failed retrieval. A course route with
+missing, unindexed or insufficient material returns `indexing_needed`,
+`insufficient_context` or a clarification, never an uncited answer.
+
+When the model puts a generic material description into `document_reference`,
+the router searches the selected course instead of reporting "I could not find
+that document". A generic description uses only descriptor words (slides,
+lecture, notes, material, readings, presentation, pdf, file, course, class) plus
+the selected course's own code and name words. Any other word or number ("Lecture
+7 slides", a title word) is a specific reference, and an unmatched one still
+reports the missing document.
+
+A model's continuation claim (`operation: continue` or `use_active_documents`) is
+accepted only when deterministic conversation state exists: previous turns, active
+documents or assignments, or a pending clarification (EC-014,
+`reject_unsupported_continuation`). Otherwise the plan becomes a topic switch before
+the EC-003 guard, so a first-turn standalone concept is not grounded in invented
+context, while student-written course references are kept.
+
+The same standalone question can route differently after a course-material turn.
+If the model treats it as a continuation (`use_active_documents`), it is answered
+from the active course material. This is deliberate: the deviation always goes
+toward grounded material, never toward ungrounded knowledge.
+
+The frontend shows a subtle "General knowledge · not from your course materials"
+label for responses with `answer_basis: general_knowledge`, including restored
+history. Course answers keep their citations and source list and have no
+`answer_basis`.
 
 The backend decides whether a route needs fresh Canvas data; the model's flag
 cannot authorize arbitrary requests or substitute cached dates for current ones.
@@ -201,10 +243,18 @@ streamed text; Unicode, mathematical symbols, tabs and normal newlines remain va
   resolution still checks actual current records and never accepts invented IDs.
 - Missing records, ambiguous titles and multiple assignments in a date window
   are not replaced with an unrelated vector-search result.
-- During an in-progress course material refresh, document routes return a
-  specific retry/indexing message instead of falsely reporting missing files.
-  Saved rubric and current-fact routes remain available. Atomic sync generations
-  are not implemented by this layer.
+- During a course sync, and after a failed or interrupted one, document, policy
+  and saved-rubric routes keep answering from the last published material (EC-012;
+  see the ingestion spec's "Sync generations"). This applies from the start of a
+  course's sync, including Canvas discovery. Answers carry a `material_notice`,
+  such as "Canvas sync is in progress. This answer uses course material saved by
+  the last completed sync." The Study Assistant shows it as a subtle line under the
+  answer, outside the collapsed "Material limitations" list (where it is not
+  repeated). Cited sources that are a retained previous
+  version, or a cache that could not be refreshed, add their own warning.
+  Live current-fact routes (deadlines, points, submission status, lists) still
+  fetch Canvas and never carry the saved-material notice. Retrieval uses the
+  served view (`served=True`).
 - Study planning, priority scoring, LangGraph, MCP and additional orchestration
   are not added by query routing.
 - Active-stream locks remain single-worker in-memory locks. Persistent chat

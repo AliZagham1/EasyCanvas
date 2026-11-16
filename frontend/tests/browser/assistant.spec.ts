@@ -162,6 +162,33 @@ test("routing clarification and refresh messages remain specific",async ({page})
   await expect(page.locator(".conversation-turn").last()).toContainText(answer);
 });
 
+test("sync notice is visible without expanding limitations and general knowledge is labelled",async ({page})=>{
+  const notice="Canvas sync is in progress. This answer uses course material saved by the last completed sync.";
+  let finish: Record<string,unknown>={...final(),warnings:[notice,"images_not_extracted"],material_notice:notice};
+  await page.route("**/assistant/stream",route=>route.fulfill({contentType:"text/event-stream",body:frames(route.request().postDataJSON(),finish)}));
+  await setup(page);await question(page,"Explain the syllabus");
+  const grounded=page.locator(".conversation-turn").last();
+  await expect(grounded.locator(".conversation-material-notice")).toBeVisible();
+  await expect(grounded.locator(".conversation-material-notice")).toHaveText(notice);
+  await expect(grounded.locator(".conversation-basis")).toHaveCount(0);
+  await expect(grounded.locator(".conversation-sources")).toHaveCount(1);
+  const notes=grounded.locator(".assistant-notes");
+  await notes.locator("summary").click();
+  await expect(notes.locator("li")).toHaveText(["Images in the material were not read."]);  // notice is not duplicated
+  finish={course_id:42,status:"answered",answer:"FCFS runs jobs in arrival order.",answer_blocks:[{text:"FCFS runs jobs in arrival order.",source_ids:[]}],
+    sources:[],warnings:[],retrieval_status:"not_applicable",retrieval_route:"general_concept",answer_basis:"general_knowledge"};
+  await question(page,"What is FCFS?");
+  const general=page.locator(".conversation-turn").last();
+  await expect(general.locator(".conversation-basis")).toHaveText("General knowledge · not from your course materials");
+  await expect(general.locator(".conversation-sources")).toHaveCount(0);
+  await expect(general.locator(".conversation-material-notice")).toHaveCount(0);
+  await page.reload();
+  await page.getByLabel("Course",{exact:true}).selectOption("42");
+  await expect(page.locator(".conversation-turn")).toHaveCount(2);
+  await expect(page.locator(".conversation-turn").first().locator(".conversation-material-notice")).toHaveText(notice);
+  await expect(page.locator(".conversation-turn").last().locator(".conversation-basis")).toBeVisible();
+});
+
 test("Stop response discards the draft and supports retry",async ({page})=>{
   let release!:()=>void;const held=new Promise<void>(r=>{release=r;});let calls=0;
   await page.route("**/assistant/stream",async route=>{

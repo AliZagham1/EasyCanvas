@@ -28,7 +28,23 @@ export type AssistantResponse = {
   sources: AssistantSource[];
   warnings: string[];
   retrieval_status: string;
+  /** Backend-owned basis; "general_knowledge" means no course material was used. */
+  answer_basis?: "general_knowledge" | null;
+  /** Saved-material notice while a Canvas sync is unfinished (also listed in warnings). */
+  material_notice?: string | null;
 };
+
+export const GENERAL_KNOWLEDGE_LABEL = "General knowledge · not from your course materials";
+
+/** A visible basis label only for answers the backend marks as general knowledge. */
+export function answerBasisLabel(response: Pick<AssistantResponse, "answer_basis">) {
+  return response.answer_basis === "general_knowledge" ? GENERAL_KNOWLEDGE_LABEL : "";
+}
+
+/** Warnings for the collapsed limitations list; the sync notice is shown on its own. */
+export function limitationWarnings(response: Pick<AssistantResponse, "warnings" | "material_notice">) {
+  return response.warnings.filter((warning) => warning !== response.material_notice);
+}
 
 export type ConversationSummary = { conversation_id: string; course_id: number; title: string; created_at: string; updated_at: string };
 export type SavedConversation = ConversationSummary & { messages: {

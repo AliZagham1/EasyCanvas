@@ -103,3 +103,17 @@ test("formats page, slide, Word, notebook and text locations without inventing m
   assert.equal(formatSourceLocation({ start_character: 0, end_character: 100 }), "Characters 0–100");
   assert.equal(formatSourceLocation({}), "");
 });
+
+test("only backend-marked general-knowledge answers get the basis label", () => {
+  const api = load(async () => { throw new Error("no network"); });
+  assert.equal(api.answerBasisLabel({ answer_basis: "general_knowledge" }), "General knowledge · not from your course materials");
+  assert.equal(api.answerBasisLabel({ answer_basis: null }), "");
+  assert.equal(api.answerBasisLabel({}), "");
+});
+
+test("the sync notice is shown on its own, not duplicated in limitations", () => {
+  const api = load(async () => { throw new Error("no network"); });
+  const notice = "Canvas sync is in progress. This answer uses course material saved by the last completed sync.";
+  assert.deepEqual([...api.limitationWarnings({ warnings: [notice, "images_not_extracted"], material_notice: notice })], ["images_not_extracted"]);
+  assert.deepEqual([...api.limitationWarnings({ warnings: ["images_not_extracted"] })], ["images_not_extracted"]);
+});
