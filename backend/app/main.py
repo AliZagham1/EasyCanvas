@@ -17,6 +17,7 @@ from backend.app.canvas_service import (
 )
 from backend.app.course_sync_service import CourseSyncService
 from backend.app import priority_service
+from backend.app import visual_document_service
 from backend.app import rag_service
 from backend.app import retention_service
 from backend.app import search_index_service
@@ -148,14 +149,24 @@ def cleanup_storage(body: StorageCleanup):
 class SearchSettings(BaseModel):
     model_config = {'extra': 'forbid'}
     auto_index: bool | None = Field(default=None, strict=True)
+    vision_enabled: bool | None = Field(default=None, strict=True)
     monthly_warning_usd: float | None = Field(default=None, strict=True, ge=0, le=100000, allow_inf_nan=False)
+
+
+def _settings_view(store, settings=None):
+    """Saved preferences plus the vision setting actually in effect (Settings choice, else .env default)."""
+    settings = dict(settings if settings is not None else store.load_settings())
+    saved = settings.get('vision_enabled')
+    settings['vision_from_environment'] = not isinstance(saved, bool)
+    settings['vision_enabled'] = visual_document_service.vision_enabled(store)
+    return settings
 
 
 @app.get('/api/search/settings')
 def search_settings():
     try:
         store = default_store()
-        return {'settings': store.load_settings(), 'usage': usage_summary(store)}
+        return {'settings': _settings_view(store), 'usage': usage_summary(store)}
     except (OSError, sqlite3.Error, ValueError):
         raise HTTPException(status_code=503, detail='Search settings are unavailable. Please retry.') from None
 
@@ -165,6 +176,8 @@ def change_search_settings(body: SearchSettings, request: Request):
     changes = body.model_dump(exclude_unset=True)
     if changes.get('auto_index', True) is None:
         raise HTTPException(status_code=422, detail='Choose whether automatic updates are enabled.')
+    if changes.get('vision_enabled', True) is None:
+        raise HTTPException(status_code=422, detail='Choose whether image and scanned-page reading is enabled.')
     try:
         store = default_store()
         settings = store.update_settings(changes)
@@ -176,7 +189,7 @@ def change_search_settings(body: SearchSettings, request: Request):
             service = getattr(request.app.state, 'course_sync', None)
             if service:
                 service.ensure_worker()
-        return {'settings': settings, 'usage': usage_summary(store)}
+        return {'settings': _settings_view(store, settings), 'usage': usage_summary(store)}
     except (OSError, sqlite3.Error, ValueError):
         raise HTTPException(status_code=503, detail='Search settings could not be saved. Please retry.') from None
 

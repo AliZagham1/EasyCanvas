@@ -322,8 +322,12 @@ the future, use a dedicated OpenAI project/API key for EasyCanvas. This is an
 optional setup recommendation; the app does not change projects or credentials.
 
 The optional monthly USD warning starts unset, is persisted locally, and does not
-block calls or act as a hard spending cap. Disable automatic indexing to pause
-background embedding work; interactive assistant/Vision settings remain separate.
+block calls or act as a hard spending cap. Settings has two independent switches:
+**Keep Study Assistant search automatically updated** (embeddings; off pauses background
+indexing, and **Update course search** still works) and **Read scanned pages and images
+(Vision)** (sync-time extraction; a saved choice overrides `EASYCANVAS_VISION_ENABLED`,
+which is only the default). When either is off, Settings explains that Study Assistant
+retrieval and responses will be affected.
 
 Implementation: `search_index_service.py` coordinates the existing incremental
 embedding service; SQLite stores `search_index_jobs`, `app_settings`, and a

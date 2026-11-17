@@ -851,14 +851,14 @@ class IngestionStore:
     def load_settings(self):
         with self._connection() as connection:
             row = connection.execute('SELECT settings_json FROM app_settings WHERE namespace=?', (self.namespace,)).fetchone()
-        return {'auto_index': True, 'monthly_warning_usd': None, **(json.loads(row[0]) if row else {})}
+        return {'auto_index': True, 'monthly_warning_usd': None, 'vision_enabled': None, **(json.loads(row[0]) if row else {})}
 
     def update_settings(self, changes):
         """Merge preferences atomically so simultaneous controls cannot erase each other."""
         with self._connection() as connection:
             connection.execute('BEGIN IMMEDIATE')
             row = connection.execute('SELECT settings_json FROM app_settings WHERE namespace=?', (self.namespace,)).fetchone()
-            settings = {'auto_index': True, 'monthly_warning_usd': None, **(json.loads(row[0]) if row else {}), **changes}
+            settings = {'auto_index': True, 'monthly_warning_usd': None, 'vision_enabled': None, **(json.loads(row[0]) if row else {}), **changes}
             connection.execute('INSERT OR REPLACE INTO app_settings VALUES (?, ?)', (self.namespace, json.dumps(settings)))
         return settings
 

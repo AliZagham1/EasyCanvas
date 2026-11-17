@@ -455,3 +455,5 @@ a.priority-title:focus-visible { outline: 2px solid var(--accent); outline-offse
   .priority-controls label:not(.priority-check) { flex: 1 1 140px; }
   .priority-controls select { width: 100%; }
 }
+.search-impact-notice { margin: 4px 0 20px; line-height: 1.6; }
+.search-impact-notice strong { color: var(--foreground); font-weight: 600; }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { formatCourseCode } from "@/lib/course-label";
-import { compactSearchStatus, formatApiCost, getSearchCourses, getSearchSettings, saveSearchSettings, updateSearch, usageWarningProgress } from "@/lib/search-index";
+import { compactSearchStatus, formatApiCost, getSearchCourses, getSearchSettings, saveSearchSettings, searchImpactNotice, updateSearch, usageWarningProgress } from "@/lib/search-index";
 import type { CourseIndex, SearchPreferences } from "@/lib/search-index";
 
 export default function SearchSettings() {
@@ -31,7 +31,7 @@ export default function SearchSettings() {
     return () => { controller.abort(); clearTimeout(timer); };
   }, []);
 
-  async function save(changes: {auto_index?: boolean; monthly_warning_usd?: number | null}) {
+  async function save(changes: {auto_index?: boolean; vision_enabled?: boolean; monthly_warning_usd?: number | null}) {
     if (saving.current) return;
     const previous = preferences;
     saving.current = true;
@@ -64,6 +64,8 @@ export default function SearchSettings() {
     finally { saving.current = false; setBusy(false); }
   }
 
+  const impact = preferences ? searchImpactNotice(preferences.settings.auto_index, preferences.settings.vision_enabled !== false) : null;
+  const visionUnknown = preferences !== null && typeof preferences.settings.vision_enabled !== "boolean"; // older backend: don't guess
   const usage = preferences?.usage;
   const limit = preferences?.settings.monthly_warning_usd ?? null;
   const progress = usage ? usageWarningProgress(usage.this_month.estimated_cost_usd, limit) : null;
@@ -86,8 +88,23 @@ export default function SearchSettings() {
             <span className="search-switch-track" aria-hidden="true" />
           </span>
         </label>
-        <p id="automatic-search-help" className="assistant-hint">Indexes only new or changed material using your OpenAI credits. Turn off to update courses manually.</p>
+        <p id="automatic-search-help" className="assistant-hint">Indexes only new or changed material using your OpenAI credits (embeddings). Turn off to update courses manually.</p>
       </div>
+      <div className="search-auto-option">
+        <label className="search-auto-control">
+          <span>Read scanned pages and images (Vision)</span>
+          <span className="search-switch">
+            <input type="checkbox" role="switch" checked={preferences.settings.vision_enabled === true} disabled={busy || visionUnknown} aria-describedby="vision-help"
+              onChange={event => void save({vision_enabled: event.target.checked})} />
+            <span className="search-switch-track" aria-hidden="true" />
+          </span>
+        </label>
+        <p id="vision-help" className="assistant-hint">Uses your OpenAI credits during Canvas sync to read images and scanned pages. Applies to new or changed files at the next sync; files already processed keep their results.
+          {visionUnknown ? " Restart the backend to manage this here." : preferences.settings.vision_from_environment ? " Currently following the backend default (.env); changing it here overrides that." : ""}</p>
+      </div>
+      {impact && <div className="coverage-notice search-impact-notice" role="status" aria-live="polite">
+        {impact.map((line, index) => index === 0 ? <strong key={line}>{line}</strong> : <span key={line}> {line}</span>)}
+      </div>}
       {courses.length > 0 ? <div className="coursework-panel search-course-list" aria-label="Course search readiness">{courses.map(course => {
         const title = formatCourseCode(course.title, course.title);
         return <details key={course.course_id} className={`search-course search-course-${course.status}`}>

@@ -9,7 +9,7 @@ export type CourseIndex = {
   automatic: boolean; last_successful_at: string | null; documents: DocumentIndex[];
 };
 export type UsageTotal = { estimated_cost_usd: number; calls: number; unpriced_calls: number; input_tokens: number; output_tokens: number };
-export type SearchSettings = { auto_index: boolean; monthly_warning_usd: number | null };
+export type SearchSettings = { auto_index: boolean; vision_enabled: boolean; vision_from_environment?: boolean; monthly_warning_usd: number | null };
 export type SearchPreferences = { settings: SearchSettings; usage: {
   today: UsageTotal; this_month: UsageTotal; total: UsageTotal; embedding: UsageTotal;
   vision: UsageTotal; assistant_other: UsageTotal; warning_reached: boolean;
@@ -63,4 +63,24 @@ export function compactSearchStatus(course: CourseIndex) {
   if (course.status === "failed") return "Indexing failed";
   if (course.status === "empty") return "No material yet";
   return `${course.remaining_chunks.toLocaleString()} passages pending`;
+}
+
+/**
+ * Explains how the two paid-processing switches affect Study Assistant retrieval and answers.
+ * Returns null when both are on (nothing is limited).
+ */
+export function searchImpactNotice(embeddingsOn: boolean, visionOn: boolean): string[] | null {
+  if (embeddingsOn && visionOn) return null;
+  if (!embeddingsOn && !visionOn) return [
+    "Both are off. This will affect Study Assistant retrieval and responses.",
+    "New or changed files are read as plain text only, and none of that new material is searchable until you click Update course search. Answers are limited to material that was already indexed, and scanned or image-based content will be missing.",
+  ];
+  if (!embeddingsOn) return [
+    "Automatic search updates are off. This will affect Study Assistant retrieval and responses.",
+    "New or changed material is not searchable until you click Update course search, so answers may leave it out or ask you to update first. Vision still reads images during sync and uses credits.",
+  ];
+  return [
+    "Vision is off. This will affect Study Assistant retrieval and responses.",
+    "Scanned pages, images and image-only slides are not read, so the Study Assistant can only use text that can be selected in those files. Answers about diagrams, handwriting or scanned content may be incomplete.",
+  ];
 }

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import sqlite3
 import re
 from contextlib import closing
 from dataclasses import asdict
@@ -51,8 +52,19 @@ def _native_text_coverage(native, rendered):
     return len(words & target) / len(words)
 
 
-def vision_enabled():
-    """Paid enrichment is an explicit backend setting, never a query-time action."""
+def vision_enabled(store=None):
+    """Paid enrichment is an explicit choice, never a query-time action.
+
+    A value saved in Settings wins; otherwise the backend .env default applies. Without a store
+    (tests, tools) only the environment is consulted.
+    """
+    if store is not None:
+        try:
+            saved = store.load_settings().get("vision_enabled")
+        except (OSError, sqlite3.Error, ValueError):
+            saved = None
+        if isinstance(saved, bool):
+            return saved
     return os.getenv("EASYCANVAS_VISION_ENABLED", "false").casefold() in ("1", "true", "yes")
 
 
@@ -64,12 +76,12 @@ def visual_configuration(provider=None, settings=None):
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def file_pipeline_version(metadata, provider=None):
+def file_pipeline_version(metadata, provider=None, store=None):
     """Version only the file-processing path; native/syllabus extraction stays intact."""
     native = document_service.file_pipeline_version(metadata)
     if document_service.file_format(metadata) not in SUPPORTED:
         return native
-    enabled = provider is not None or vision_enabled()
+    enabled = provider is not None or vision_enabled(store)
     renderer = ""
     if document_service.file_format(metadata) != "pdf":
         from backend.app.legacy_office import converter_fingerprint
@@ -186,7 +198,7 @@ def extract_file(metadata, content, *, store, course_id, provider=None, enabled=
     format_name = document_service.file_format(metadata)
     if format_name not in SUPPORTED or native["status"] not in ("ok", "partial", "no_text"):
         return native
-    enabled = (provider is not None or vision_enabled()) if enabled is None else enabled
+    enabled = (provider is not None or vision_enabled(store)) if enabled is None else enabled
     result = copy.deepcopy(native)
     content_hash = hashlib.sha256(content).hexdigest()
     try:

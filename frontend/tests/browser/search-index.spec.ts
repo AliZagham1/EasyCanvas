@@ -8,14 +8,14 @@ function course(status = 'pending', remaining = 4) {
       pending_chunks:remaining,failed_chunks:0,remaining_chunks:remaining,extraction_status:'ok'}]};
 }
 const total = {estimated_cost_usd:3.42,calls:8,unpriced_calls:0,input_tokens:16915,output_tokens:1360};
-function preferences(warning: number|null = null, automatic = true) {
+function preferences(warning: number|null = null, automatic = true, vision = true) {
   const features={embedding:{...total,estimated_cost_usd:.0001},vision:{...total,estimated_cost_usd:0},assistant_other:{...total,estimated_cost_usd:3.4199}};
-  return {settings:{auto_index:automatic,monthly_warning_usd:warning},usage:{today:{...total,estimated_cost_usd:.12},this_month:total,
+  return {settings:{auto_index:automatic,vision_enabled:vision,monthly_warning_usd:warning},usage:{today:{...total,estimated_cost_usd:.12},this_month:total,
     total:{...total,estimated_cost_usd:7.42,calls:12},...features,monthly_breakdown:features,
     warning_reached:warning!==null && 3.42>=warning,recording_started_at:'2026-11-03T12:00:00Z',notice:'Local estimate'}};
 }
-async function settings(page: Page, options: {warning?:number|null; automatic?:boolean; status?:string; readyOnPoll?:boolean; saveFails?:boolean} = {}) {
-  let data = preferences(options.warning??null, options.automatic??true);
+async function settings(page: Page, options: {warning?:number|null; automatic?:boolean; vision?:boolean; status?:string; readyOnPoll?:boolean; saveFails?:boolean} = {}) {
+  let data = preferences(options.warning??null, options.automatic??true, options.vision??true);
   let status = {...course(options.status),automatic:data.settings.auto_index};
   let polls=0, indexPosts=0;
   await page.route('**/api/search/settings', route => {
@@ -59,7 +59,7 @@ test('switch, compact course counts, document details, and manual queue persist'
 
 test('OFF to ON refreshes queued work immediately and polls through ready without a manual indexing request',async({page})=>{
   const calls=await settings(page,{automatic:false,readyOnPoll:true});
-  await page.getByRole('switch').check();
+  await page.getByRole('switch',{name:'Keep Study Assistant search automatically updated'}).check();
   await expect(page.getByText('Updating…',{exact:true})).toBeVisible();
   await expect(page.getByText('Ready',{exact:true})).toBeVisible({timeout:15000});
   expect(calls.getIndexPosts()).toBe(0);
@@ -98,7 +98,7 @@ test('zero warning has no division by zero and does not disable API controls',as
   await expect(page.getByText('Warning level is $0.00. Any tracked cost reaches this warning.')).toBeVisible();
   await expect(page.getByText('Monthly warning reached. API requests are still allowed.')).toBeVisible();
   await expect(page.getByRole('progressbar',{name:'Monthly EasyCanvas tracked usage'})).toHaveCount(0);
-  await expect(page.getByRole('switch')).toBeEnabled();
+  await expect(page.getByRole('switch',{name:'Keep Study Assistant search automatically updated'})).toBeEnabled();
 });
 
 test('failed indexing keeps a working retry and a failed save rolls back the switch',async({page})=>{
@@ -107,9 +107,9 @@ test('failed indexing keeps a working retry and a failed save rolls back the swi
   await page.getByText('CSE 3311',{exact:true}).click();
   await page.getByRole('button',{name:'Retry indexing'}).click();
   await expect(page.getByText('Updating…',{exact:true})).toBeVisible();
-  await page.getByRole('switch').uncheck();
+  await page.getByRole('switch',{name:'Keep Study Assistant search automatically updated'}).uncheck();
   await expect(page.getByText('Search settings could not be saved. Please retry.')).toBeVisible();
-  await expect(page.getByRole('switch')).toBeChecked();
+  await expect(page.getByRole('switch',{name:'Keep Study Assistant search automatically updated'})).toBeChecked();
   await expect(page.getByText('private provider detail')).toHaveCount(0);
 });
 
@@ -134,4 +134,42 @@ test('assistant course readiness updates without losing conversation context',as
   await page.getByRole('button',{name:'Update course search',exact:true}).click();
   await expect(page.getByText('Updating course search — 4 passages remaining')).toBeVisible();
   await expect(page.getByRole('combobox',{name:'Conversation',exact:true})).toBeEnabled();
+});
+
+test('vision and embeddings switches show how each combination affects retrieval and responses',async({page})=>{
+  await settings(page);
+  const embeddings=page.getByRole('switch',{name:'Keep Study Assistant search automatically updated'});
+  const vision=page.getByRole('switch',{name:'Read scanned pages and images (Vision)'});
+  const notice=page.locator('.search-impact-notice');
+  await expect(embeddings).toBeChecked();await expect(vision).toBeChecked();
+  await expect(notice).toHaveCount(0);
+  await vision.uncheck();await expect(vision).not.toBeChecked();
+  await expect(notice).toContainText('Vision is off');
+  await expect(notice).toContainText('affect Study Assistant retrieval and responses');
+  await embeddings.uncheck();
+  await expect(notice).toContainText('Both are off');
+  await vision.check();
+  await expect(notice).toContainText('Automatic search updates are off');
+  await expect(notice).toContainText('Vision still reads images');
+  await embeddings.check();
+  await expect(notice).toHaveCount(0);
+  await page.reload();await expect(notice).toHaveCount(0);
+});
+
+test('a vision setting saved as OFF loads as OFF with its warning',async({page})=>{
+  await settings(page,{vision:false});
+  await expect(page.getByRole('switch',{name:'Read scanned pages and images (Vision)'})).not.toBeChecked();
+  await expect(page.locator('.search-impact-notice')).toContainText('Vision is off');
+});
+
+test('an older backend without the vision setting does not show a false "Vision is off" warning',async({page})=>{
+  await settings(page);
+  await page.unroute('**/api/search/settings');
+  const legacy=preferences(null,true,true);delete (legacy.settings as {vision_enabled?:boolean}).vision_enabled;
+  await page.route('**/api/search/settings',route=>route.fulfill({json:legacy}));
+  await page.reload();
+  const vision=page.getByRole('switch',{name:'Read scanned pages and images (Vision)'});
+  await expect(vision).toBeDisabled();
+  await expect(page.locator('.search-impact-notice')).toHaveCount(0);
+  await expect(page.getByText('Restart the backend to manage this here.')).toBeVisible();
 });

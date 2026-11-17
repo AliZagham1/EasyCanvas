@@ -357,7 +357,7 @@ def _ingest_snapshot(course_id, snapshot, store, *, started, max_files, force, o
                 title=metadata.get("display_name") or metadata.get("filename") or document["title"],
                 updated_at=metadata.get("updated_at"), created_at=metadata.get("created_at"),
                 version=_file_version(metadata),
-                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider),
+                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider, store=store),
                 metadata={key: value for key, value in metadata.items() if key not in ("url", "thumbnail_url")},
             )
             previous = store.load_document(course_id, document["document_key"])
@@ -478,7 +478,7 @@ def enrich_saved_course(course_id, *, store=None, vision_provider=None, document
         if not visual_document_service.pending_visual_content(previous):
             report["reused"] += 1
             continue
-        pipeline = visual_document_service.file_pipeline_version(metadata, vision_provider)
+        pipeline = visual_document_service.file_pipeline_version(metadata, vision_provider, store=store)
         document = {key: previous.get(key) for key in ('document_key', 'canvas_id', 'course_id', 'source_type', 'title', 'url', 'references', 'created_at', 'updated_at', 'version', 'source_role', 'http_validators')}
         document["pipeline_version"] = pipeline
         try:
@@ -496,7 +496,7 @@ def enrich_saved_course(course_id, *, store=None, vision_provider=None, document
                 document.update(title=metadata.get('display_name') or metadata.get('filename') or document['title'],
                                 metadata={k: v for k, v in metadata.items() if k not in ('url', 'thumbnail_url')},
                                 updated_at=metadata.get('updated_at'), version=_file_version(metadata),
-                                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider))
+                                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider, store=store))
                 if metadata.get('locked_for_user'):
                     document.update(status='unavailable', error_type='LockedForUser', text='', pages=[])
                     content = None

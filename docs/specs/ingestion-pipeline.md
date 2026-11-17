@@ -8,10 +8,14 @@ text → save that text with the course ID, file ID, timestamps, and page number
 
 ## Automatic app flow
 
-Paid visual processing is enabled with `EASYCANVAS_VISION_ENABLED=true` in the
-root `.env` (the example config enables it). Restart the backend after changing
-the setting; an explicit shell environment value takes precedence over `.env`.
-Keep it false for inspection-only work. Automated tests use fake providers.
+Paid visual processing defaults to `EASYCANVAS_VISION_ENABLED` in the root `.env`
+(the example config enables it; an explicit shell environment value takes precedence
+over `.env`). The Settings page has a **Read scanned pages and images (Vision)** switch
+that overrides this default once you change it; it is stored with the other app settings
+and read by the sync worker at the next sync, so no restart is needed. Turning it off
+only affects new or changed files: already-processed files keep their results, and
+turning it on later retries files whose visual content is pending. Keep it off for
+inspection-only work. Automated tests use fake providers.
 
 `enrich_saved_course()` backfills only still-pending/failed visual content and
 keeps completed per-page transcriptions cached. Enabling Vision alone does not
