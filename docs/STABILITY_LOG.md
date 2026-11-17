@@ -303,3 +303,35 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
   - Courses that permit AI only with citation are not restricted; the assistant does not yet remind the student to cite.
   - One real syllabus was extracted with corrupted letters, which hides a deferral phrase. The effect is conservative: an assignment-level authorization in that course would be treated as a conflict, not an exception. The extraction defect itself is not addressed here.
 - Related: none of the earlier entries covers policy detection.
+
+## EC-016 — Study Assistant fails with "could not complete a validated response" on a harmless optional-field variation
+
+- Date: 2026-11-17
+- Status: **Fixed** (2026-11-17). Regression tests pass, both failures were reproduced and fixed offline, and a live run of 8 real questions produced no validation error and captured one live occurrence of the cause (see verification).
+- Symptom: 2 of 22 real questions in the EC-015 live run ended with "The assistant could not complete a validated response. Please retry." before any answer was attempted, although the provider call completed and was billed.
+- Evidence and limits: the backend logged nothing for a rejected plan, so the rejected field was not captured in the original failures. The saved conversation data held no plan for the two failed turns. The two failed questions contained an ordinal word ("first") and a digit list ("1 2 3"); the stored plans of the 42 answered turns all pass today's validator. The failure was reproduced offline with stubbed plans of that shape, which fail in the same way. The new live run then observed the real model writing a non-digit value into `homework_number` (see verification), which confirms the mechanism, though not the identity of the two original rejected values.
+- Root cause: the query model's JSON schema types `question_number`, `assignment_number` and `homework_number` as free text, but `validate_understanding()` requires ASCII digits and raised on anything else ("first", "Q1", "1 2 3"). One malformed optional field failed the whole request. The same all-or-nothing rejection applied to blank list items and duplicate `requested_data`.
+- Fix:
+  - `query_understanding_service.py`:
+    - `repair_understanding()` normalizes recoverable variations before strict validation: a number field that states exactly one number ("first", "Q1", "1st", "six"), blank list items, duplicate requested data, and an empty search query (replaced by the student's own question).
+    - An unclear question number ("1 2 3", "first two", "the big one") is dropped, which makes retrieval broader, not different. An unclear assignment or homework number is dropped only when the plan also names the assignment; otherwise the plan is still rejected, because dropping the only identity would turn the request course-wide. A `general_concept` plan with an unclear number is still rejected, so the repair cannot open the ungrounded route.
+    - Intent, operation, flags and the course, assignment and document references are never changed.
+    - `validate_understanding()` is unchanged in what it accepts and now raises `PlanRejected`, carrying the field and condition.
+    - `checked_understanding()` runs repair then strict validation and writes one structured log line per repair or rejection.
+  - `llm_service.py`: `rewrite_query` uses `checked_understanding()` and logs incomplete responses and provider or parse failures by error class only.
+  - Diagnostic log line `query_plan_validation`: outcome, field, condition code, intent, model, and the value's shape (type, byte length, character classes, digit-group count). It never holds the question, any plan value, course text, IDs or provider error messages.
+- Files: `backend/app/query_understanding_service.py`, `backend/app/llm_service.py`, `backend/tests/test_query_plan_validation.py`.
+- Regression tests: `test_query_plan_validation.py` (19 tests): number normalization and dropping, including ambiguous phrases ("the big one", "2nd one"); blank-item, duplicate and empty-query repair; repair never alters identity, intent or flags; a valid plan is unchanged and silent; every required or contract field and every identity reference is still rejected, including an excluded reference too long to keep (dropping it would invert an exclusion); log lines hold shapes and never values (checked with private strings and a fake key in a provider error); the real provider method with a stubbed client repairs both live-shape plans and still raises on rejection, incomplete responses and parse failures; EC-015 bans still refuse before generation after every repair; an unrecoverable identity and a contradictory general plan are errors, not course-wide or ungrounded answers; and the two failed live questions now answer through the conversation service.
+- Verification:
+  - 711 backend tests (the 43 EC-015 policy tests among them), 231/231 offline evaluation with production files unchanged, 33 frontend unit tests and ESLint.
+  - Live run (2026-11-17, backend restarted on this code with Vision disabled, real models, database copy): 8 questions through the streaming API, estimated cost about $0.004 including startup indexing. No question ended in the validation error. Results:
+    - restricted course, two solution requests worded with an ordinal ("first question", "second part of question one"): both refused before generation, no answer-model call (the EC-015 ban holds);
+    - permitting course, the practice-problem question that failed before, three times: all completed (no ban, and the model reported insufficient material);
+    - permitting course, an ordinal solution request twice: both completed; an ordinary explanation: generated and cited.
+  - Diagnostic log: one `query_plan_validation` line in 8 questions, `outcome=repaired`, `condition=unclear_number_dropped`, field `homework_number`, shape 15 bytes of letters and spaces with no digits, intent `solve_question`. The real model wrote a descriptive phrase into a number field, and the same plan would previously have been rejected. The question text is not in the line.
+- Remaining risk:
+  - The two original rejected values were never observed; the cause is confirmed by one live recurrence of the same mechanism, not by those plans.
+  - One repair in 8 questions suggests the variation is not rare; the log line makes the rate measurable over time.
+  - Repairs recognize English wording only. An unrecognized number phrase is dropped when the plan names the assignment, and rejected when it does not.
+  - Other provider failures (timeouts, incomplete responses) are not retried here; they are now logged by class and still fail the question.
+- Related: EC-015 (found during its live verification); the repair deliberately cannot weaken its policy checks.

@@ -139,7 +139,8 @@ class OpenAIAnswerProvider:
         """Resolve references only; return no answer and select no invented IDs."""
         from openai import AsyncOpenAI, OpenAIError
         model = os.getenv("EASYCANVAS_QUERY_MODEL") or self.model
-        from backend.app.query_understanding_service import QUERY_INSTRUCTIONS, query_schema, validate_understanding
+        from backend.app.query_understanding_service import (
+            QUERY_INSTRUCTIONS, PlanRejected, checked_understanding, log_plan_event, query_schema)
         schema = query_schema()
         instructions = QUERY_INSTRUCTIONS
         accounted = False
@@ -155,10 +156,17 @@ class OpenAIAnswerProvider:
                     self.usage_recorder.record(response, feature='query_understanding', operation='responses.create', model=model)
                     accounted = True
                 if response.status != "completed":
+                    reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+                    log_plan_event("incomplete", condition=":".join(str(part)[:40] for part in (response.status, reason) if part), model=model)
                     raise LLMProviderError("Query understanding did not complete.")
                 result = json.loads(response.output_text)
-                return validate_understanding(result)
-        except (OpenAIError, ValueError, TypeError, KeyError, AttributeError):
+                # Recoverable optional-field variations are repaired; everything else is rejected and logged.
+                return checked_understanding(result, question, model=model)
+        except PlanRejected:
+            raise LLMProviderError("Unable to understand the question. Please retry or name the assignment.") from None
+        except (OpenAIError, ValueError, TypeError, KeyError, AttributeError) as error:
+            # The error class only: provider messages can echo request content.
+            log_plan_event("failed", condition=type(error).__name__, model=model)
             raise LLMProviderError("Unable to understand the question. Please retry or name the assignment.") from None
         finally:
             if self.usage_recorder and not accounted:
