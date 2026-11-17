@@ -222,3 +222,84 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
   - Observation: the live model made this unsupported claim on 3 of 4 first turns in that run, so the correction matters in practice.
 - Remaining risk: a fresh live question cannot force the model to repeat the misclassification, so live confirmation of the student-facing answer is optional. The paid `live-query` evaluation would measure how often the shape occurs.
 - Related: EC-003 (same invariant, different trigger), EC-013 (found during its live verification).
+
+## EC-015 — AI-use restrictions missed for common wording and for course-wide syllabus rules
+
+- Date: 2026-11-16
+- Status: **Fixed** (2026-11-16). Regression tests pass, the detector and resolver were checked read-only against the real saved course text, and the six required real scenarios passed through the running backend with the real models (see verification). One scenario failed in the first live run; its cause was corrected and covered by a regression test before the final run.
+- Symptom: a request to produce assigned work could be answered although the instructor prohibits AI.
+  - The detector recognized 4 of 14 clearly worded prohibitions. It missed, for example, "You are not allowed to use AI tools", "Don't use ChatGPT", "AI tools are banned" and "Submitting AI-generated code will be treated as cheating".
+  - Only an assignment's own description and linked instruction files were read, so a course-wide rule in the syllabus never applied to an assignment.
+- Root cause:
+  - Detection used three narrow patterns that required a denial word directly beside a short list of AI terms. Contractions, "not allowed to", "banned", "off limits", "without the use of", product names (Copilot, Claude, Gemini) and misconduct or penalty framing did not match.
+  - `attach_instructions()` received no syllabus documents, and no rule had a scope, so there was no notion of a course-wide rule, an authorized exception or a conflict.
+- Impact: `CLAUDE.md` forbids bypassing assignment AI-use restrictions. Before this change a restricted solution request was blocked only when the assignment's own text used one of the few recognized wordings.
+- Fix (approved 2026-11-16):
+  - `backend/app/ai_use_policy.py` (new): deterministic sentence classification into prohibited, limited, permitted or no statement. It records whether a rule defers to instructor authorization and whether it is limited to a kind of work. AI named as a course topic is not a statement. No model is called.
+  - `assignment_policy_service.py`:
+    - reads syllabus AI statements as course-wide rules and applies them to every resolved assignment, limited to a work type when the syllabus says so;
+    - keeps assignment rules attached only to their own assignment;
+    - treats an assignment's explicit permission as an authorized exception only when every applicable syllabus rule defers to authorization;
+    - otherwise records a conflict, enforces the stricter rule and explains the conflict with citations to both sources;
+    - rejoins sentences that PDF extraction wrapped across lines;
+    - recognizes a plain request to do the work ("write the code for HW 3") in addition to the model's intent.
+  - `retrieval_router.py`:
+    - passes syllabus documents at the three places where policy is attached, including a named work file with no Canvas assignment record;
+    - when a solution request names no assignment, applies the rules of any assigned work among its three best-matching retrieved passages (a pasted or reworded question, or a follow-up whose context the query model dropped), and the response says the question closely matches assigned work;
+    - treats a request for a solutions or answer-key document under a restriction as a solution request however it is worded, and treats such a file as assigned work even when it is linked to no assignment.
+  - `rag_service.py`: adds one conflict notice to the warnings of every answer about an assignment whose rules conflict.
+  - Enforcement is unchanged in kind and still happens before generation: a restricted solution request gets the backend-written cited response with no answer-model call, and other answers under a restriction are buffered and checked for solution leakage.
+- Design corrections from real course text: the first version was run read-only against the saved syllabi before it was finalized, and two defects were corrected.
+  - A syllabus sentence saying that *unauthorized* AI use is a breach was read as a course-wide ban, and "this course permits the use of generative AI" was not recognized as a permission. Together these would have blocked solution help in courses that permit AI. A rule that defers to authorization is now satisfied by an explicit permission in the same source, and "permits/prohibits the use of" wording is recognized. A flat prohibition is never lifted this way.
+  - Policy sentences were cut in half by hard line wraps and went undetected. Wrapped lines are now rejoined.
+- Files: `backend/app/ai_use_policy.py`, `backend/app/assignment_policy_service.py`, `backend/app/retrieval_router.py`, `backend/app/rag_service.py`, `docs/specs/study-assistant.md`.
+- Regression tests: `backend/tests/test_ai_use_policy.py` (43 tests):
+  - all 14 reported prohibitions, plus other common wording, institutional wording and wrapped lines;
+  - permissions, limited permissions, rules that defer to authorization, and wording that is neither (AI as a course topic, citation-only rules, conditions);
+  - a syllabus ban applies to every assignment and is enforced before generation, citing the syllabus;
+  - an assignment-only ban does not spread to other assignments;
+  - an exam-only syllabus rule does not restrict homework but does restrict an exam;
+  - concept questions and lecture or practice material are not restricted, while a named work file is;
+  - authorized exception, conflict in both directions, and the conflict notice on permissible answers;
+  - a syllabus that defers and then permits AI is not a ban; one that only defers restricts until an authorization is found;
+  - streaming: a restricted solution request produces no draft and no model call, and a leaked solution is replaced;
+  - bypass attempts: a pasted question with no assignment named, solution wording under a model-mislabelled intent, a solutions file requested with neutral wording, an answer-key file linked to no assignment, a solution follow-up after a permitted explanation, and a retry after a refusal relabelled as an explanation are all blocked before generation;
+  - assigned work that a lecture slide outranks still decides, and assigned work far below the best match does not (the live finding below);
+  - the same paths stay open when nothing restricts them: an unrestricted course, a concept question, practice material and a conceptual follow-up are still answered.
+
+  With the router changes reverted, 16 of the first 33 fail; with only the two bypass rules removed, 4 of the first 8 bypass tests fail (the three follow-up tests and the unrestricted-paths test pass either way, because a continuing turn already kept its assignment). The outranked-slide test fails under the earlier single-passage rule. The existing 14 policy tests in `test_assignment_policy.py` pass unchanged.
+- Verification:
+  - 692 backend tests, 231/231 offline evaluation with production files unchanged, 33 frontend unit tests and ESLint passed. The frontend was not changed, so the browser tests and production build were not re-run.
+  - Read-only check against the real database copy (SQLite opened read-only, no network or provider calls), six current courses:
+    - three syllabi defer to authorization and then permit cited AI use: 0 of 51 assignments restricted;
+    - two syllabi do not mention AI tools: 0 of 28 restricted;
+    - one syllabus limits AI to learning support and bans producing graded work without written authorization: 19 of 19 restricted.
+    - The previous detector recognized 1 of the 12 AI-use statements found. No assignment description in these courses contains an AI-use statement.
+  - Live verification (2026-11-16): the backend was restarted on this code with Vision disabled and asked real questions through the HTTP streaming API, against the database copy. 22 questions were asked across four runs; estimated API cost was about $0.012 including diagnosis. The final runs gave the results below. The only change after the ten-question run was the refusal wording for unnamed assignments, which was re-checked live on the pasted question.
+
+    | Scenario | Expected | Result |
+    |---|---|---|
+    | Solution request for a homework in the restricted course | Refused before generation | Refused; no answer-model call, no draft; cites the homework's own instructions |
+    | Explanation of what that homework asks, same course | Generated | Generated and cited; held back until checked; no solution pattern |
+    | Concept question, same course | Answered | Answered and labelled general knowledge |
+    | Solution request for a homework in a course that permits cited AI use | No AI restriction | No AI restriction applied; the answer model was called and reported insufficient material, because the course material holds the question, not a solution |
+    | Explanation of that homework, permitting course | Generated | Generated and cited |
+    | Pasted assignment question, no assignment named | Refused | Refused before generation (failed in the first run; see below) |
+    | Reworded assignment question, no assignment named | Refused | Refused before generation |
+    | Answer-key document, neutral wording | Refused | Refused before generation; cites the syllabus |
+    | Follow-up "just give me the answers" after an explanation | Refused; same assignment | Refused; the conversation kept the same assignment |
+    | Conceptual follow-up after that refusal | Generated | Generated and cited |
+
+  - Live finding and correction: in the first run the pasted question was answered. A lecture slide quoting the same example scored 0.572 and the homework file 0.542, so the single best passage was not assigned work. The eight leading scores lay within 0.06 of each other, and the ranking changed between runs because the query model rewrites the search text. The rule now uses the three best-matching passages.
+  - Before the first run, reading the real course data showed an answer-key file linked to no assignment and with no kind of work in its title, which the course-wide rule would not have treated as assigned work. That was corrected and tested before any live call.
+- Remaining risk:
+  - English wording rules cannot cover every phrasing. Unrecognized wording yields no statement and restricts nothing.
+  - A rule split across a heading and a following line, or expressed only as a selected option name, may be missed.
+  - A question about assigned work that uses no solution wording and names no assignment is answered as a course question. The general-knowledge route retrieves nothing, so a concept-phrased question cannot be matched to an assignment.
+  - The unnamed-assignment rule depends on retrieval ranking. It held for one pasted and one reworded question live; a rewording whose assigned work falls outside the three best-matching passages would not be caught.
+  - The same rule is conservative. Live, a solution request for a made-up practice problem in the restricted course was refused, because its best-matching passage was a homework on the same topic. The syllabus of that course permits practice examples only when unrelated to graded assignments.
+  - Found during live verification, not part of this fix: 2 of 22 questions ended in "The assistant could not complete a validated response" before generation. The provider call completed; the model's plan was then rejected by `validate_understanding()`, which is stricter than the JSON schema for some fields. The rejected field was not captured because the backend does not log it.
+  - Under a course-wide restriction every answer about an assignment is buffered and checked, so an explanation that contains code is replaced by the policy response.
+  - Courses that permit AI only with citation are not restricted; the assistant does not yet remind the student to cite.
+  - One real syllabus was extracted with corrupted letters, which hides a deferral phrase. The effect is conservative: an assignment-level authorization in that course would be treated as a conflict, not an exception. The extraction defect itself is not addressed here.
+- Related: none of the earlier entries covers policy detection.

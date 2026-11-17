@@ -299,6 +299,9 @@ def _finish_answer(report, response, sources, question=None):
         used_ids = {sid for block in answer['blocks'] for sid in block['source_ids']}
         # Keep index/coverage limits, then calculate extraction warnings from cited sources.
         scoped = [report['material_notice']] if report.get('material_notice') else []
+        if (report.get('assignment_policy') or {}).get('conflicts'):
+            # Syllabus and assignment disagree on AI use: say so on every answer (EC-015).
+            scoped.append(policy_service.CONFLICT_NOTICE)
         if report['retrieval_status'] == 'partial':
             scoped.append('The course index is incomplete; answers use only indexed material.')
         coverage = report.get('evidence_coverage')

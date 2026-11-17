@@ -205,18 +205,104 @@ local reports, not committed logs.
 
 ## Assignment-policy enforcement
 
-`assignment_policy_service.py` reads restrictions only from backend-resolved native
-assignment instructions and related non-solution instruction documents. This
-includes module-related/file-only work. Bounded policy/submission excerpts are
-reserved ahead of competing solution passages, with original source IDs and
-page/slide/block metadata where available. A solution file does not erase the
-applicable question-document policy. Instructor-template sources remain excluded.
+`assignment_policy_service.py` reads restrictions from backend-resolved native
+assignment instructions, related non-solution instruction documents and, for
+AI use, the course syllabus. This includes module-related/file-only work.
+Bounded policy/submission excerpts are reserved ahead of competing solution
+passages, with original source IDs and page/slide/block metadata where
+available. A solution file does not erase the applicable question-document
+policy. Instructor-template sources remain excluded.
 
-Clear AI/GenAI-generated-work bans, outside-assistance bans and individual-work
-requirements are separate rule categories. Submission-format requirements are
-preserved separately; they do not automatically become an AI ban. These are
-deterministic English-language rules, not a complete interpreter for arbitrary
-institutional policies. Permissive wording is not treated as a prohibition.
+AI/GenAI-generated-work bans, limited AI permissions, outside-assistance bans
+and individual-work requirements are separate rule categories.
+Submission-format requirements are preserved separately; they do not
+automatically become an AI ban.
+
+### AI-use statements (EC-015)
+
+`ai_use_policy.py` classifies each sentence that names an AI tool in a usage
+sense. No model is called. Lines wrapped by PDF extraction are rejoined first.
+
+- **Prohibited:** direct bans ("do not use", "not allowed to use", "is banned",
+  "off limits", "this course prohibits the use of"), "must be completed without
+  AI", and penalty or misconduct framing ("will be treated as cheating", "will
+  receive a zero").
+- **Limited:** permission restricted to stated purposes ("for brainstorming
+  only", "to check grammar") or to instructor authorization. A limited
+  permission does not cover producing the assigned work.
+- **Permitted:** explicit permission ("you may use", "this course permits the
+  use of"). Permissive wording is never treated as a prohibition.
+- **No statement:** AI named as a course topic ("the AI lab", "no AI background
+  is required"), a rule that only penalizes uncited use, or a condition ("when
+  AI use is authorized, cite it").
+
+Each statement records whether the rule itself defers to authorization
+("unless permitted by the instructor", "unauthorized use", "without written
+permission") and whether it is limited to a kind of work by an explicit scoping
+phrase ("on exams", "for homework"). Unscoped statements cover all course work.
+
+### Scope and resolution
+
+- **Assignment-specific:** statements in an assignment's description or linked
+  instruction documents apply only to that assignment.
+- **Course-wide:** statements in the syllabus apply to every resolved
+  assignment, and to a named work file without a Canvas assignment record (for
+  example a project specification). They do not apply to lecture or practice
+  material, or to concept questions. A statement scoped to a work type applies
+  only to assignments of that type, judged from the title and Canvas quiz type.
+- **Same source:** a rule that defers to authorization is satisfied by an
+  explicit permission in the same source. A syllabus that says unauthorized AI
+  use is a breach and then permits AI for assignments is not a ban. A flat
+  prohibition is never lifted by a permission elsewhere in the same source.
+- **Authorized exception:** if every applicable syllabus rule defers to
+  authorization and the assignment explicitly permits AI, the assignment is not
+  restricted. The exception is recorded in `assignment_policy.exceptions`.
+- **Conflict:** if the syllabus prohibits AI flatly and the assignment permits
+  it, permission is not assumed. The syllabus rule is enforced, the response
+  explains the conflict and cites both sources, and every answer about that
+  assignment carries a notice. If the syllabus permits AI and the assignment
+  prohibits it, the assignment's restriction applies and the response says so.
+  Conflicts are recorded in `assignment_policy.conflicts`.
+
+These are deterministic English-language rules, not a complete interpreter for
+arbitrary institutional policies. Unrecognized wording yields no statement, so
+it restricts nothing.
+
+### Requests that do not name the assignment
+
+A restriction follows the work the answer would come from, not the wording of
+the request.
+
+- **Solution request:** recognized from the model's `solve_question` intent,
+  from solution wording, or from a plain request in the student's words ("write
+  the code for HW 3", "do my homework"). Enforcement does not depend only on
+  the model's classification.
+- **Follow-ups:** a turn that continues the conversation keeps its resolved
+  assignment, so a solution request after an explanation, or a retry after a
+  refusal, is checked against the same rules.
+- **Pasted or reworded question:** when a solution request names no assignment,
+  its three best-matching retrieved passages decide. If assigned work is among
+  them (a Canvas assignment, a document linked to one, or a work file), that
+  work's own rules and the course-wide rules apply. Real similarity scores are
+  close together, and a lecture slide can outrank the assignment it quotes, so
+  one passage is not enough. A passage scoring below three quarters of the best
+  match is ignored, and a result with no applicable restriction is returned
+  unchanged. The response says the question closely matches assigned work.
+- **Solutions file:** a request for a solutions or answer-key document under a
+  restriction is a solution request however it is worded. Such a file counts as
+  assigned work even when it is linked to no assignment and its title names no
+  kind of work.
+
+Not covered: a question about assigned work that uses no solution wording and
+names no assignment is answered as a course question, and the general-knowledge
+route retrieves nothing, so it cannot be matched to an assignment.
+
+Known trade-off: in a restricted course, a solution request for a problem the
+student made up is refused when its best-matching passages are assigned work on
+the same topic. The assistant still explains the concept when asked without
+solution wording.
+
+### Enforcement
 
 Explicit solution requests under a known assistance restriction receive a cited,
 backend-written alternative offering conceptual/instruction help, without answer

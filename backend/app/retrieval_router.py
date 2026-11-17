@@ -15,7 +15,7 @@ from backend.app.llm_service import LLMProviderError
 from backend.app.query_understanding_service import validate_understanding
 from backend.app.clarification_service import candidate_state, FACT_INTENTS
 from backend.app.conversation_state_service import interpret_turn, entity_matches, title_words
-from backend.app.assignment_policy_service import attach_instructions
+from backend.app.assignment_policy_service import attach_instructions, course_policy_keys, solution_request, solution_restricted
 
 
 def _standalone_concept(question):
@@ -216,6 +216,59 @@ def _assignment_list(course_id, question, plan, snapshot, context, now):
             'query_understanding':plan, 'retrieval_route':'current_assignment_list'}
 
 
+def _work_titles(keys, docs, explicit):
+    """Names that describe the requested work when no Canvas assignment record exists."""
+    titles = [doc.get('title') or '' for doc in docs if doc['document_key'] in keys]
+    return titles + ([str(explicit['family'][0])] if explicit.get('family') else [])
+
+
+# A solution request is judged by its best-matching passages: this many, each at least
+# this fraction as similar as the best one.
+LEADING_PASSAGES = 3
+LEADING_RELEVANCE = 0.75
+
+
+def _solution_material(keys, docs):
+    """An answer key or solutions file is about assigned work, whatever its title says."""
+    return any(document_role(doc) == 'solution' for doc in docs if doc['document_key'] in keys)
+
+
+def _policy_for_retrieved_work(result, course_id, question, store):
+    """A solution request answered from assigned work inherits that work's AI-use rules (EC-015).
+
+    Covers a pasted or reworded assignment question, and a follow-up whose
+    conversation context the query model dropped: no assignment was named, but
+    assigned work is among the best-matching passages. Real similarity scores
+    are close together (a lecture slide can outrank the assignment it quotes),
+    so the leading few passages decide, not only the first. Passages far below
+    the best match are ignored, and a result without an applicable restriction
+    is returned unchanged.
+    """
+    if (result.get('assignment_policy') or result.get('retrieval_route') not in ('course_material', 'document_material')
+            or not result.get('results') or not solution_request(question, result.get('query_understanding'))):
+        return result
+    scored = sorted((item for item in result['results'] if isinstance(item.get('score'), (int, float))), key=lambda item: -item['score'])
+    leading = [item for item in scored[:LEADING_PASSAGES] if item['score'] >= scored[0]['score'] * LEADING_RELEVANCE] or result['results'][:1]
+    keys = list(dict.fromkeys(origin['document_key'] for item in leading for origin in item['sources']))
+    snapshot = store.load_course(course_id) or {}
+    docs = store.load_documents(course_id, served=True)
+    by_key = {doc['document_key']: doc for doc in docs}
+    linked = {ref.get('canvas_id') for key in keys for ref in by_key.get(key, {}).get('references') or []
+              if ref.get('source_type') == 'assignment'}
+    records = [a for a in snapshot.get('assignments', []) if a.get('course_id', course_id) == course_id
+               and (f"assignment:{a['canvas_id']}" in keys or a['canvas_id'] in linked)]
+    if records:
+        candidate = _retain_assignment_instructions(result, course_id, records, docs, snapshot)
+    else:
+        candidate = attach_instructions(result, course_id, [], docs, set(), policy_keys=course_policy_keys(docs),
+                                        work_titles=[by_key[key].get('title') or '' for key in keys if key in by_key],
+                                        assigned_work=_solution_material(keys, docs))
+    if not solution_restricted(candidate.get('assignment_policy')):
+        return result
+    # The student named no assignment; the response should say why a rule applies.
+    return {**candidate, 'assignment_policy': {**candidate['assignment_policy'], 'matched_work': True}}
+
+
 def _retain_assignment_instructions(result, course_id, records, docs, snapshot):
     """Keep policy-bearing linked instructions regardless of the selected role."""
     instruction_keys = set()
@@ -224,7 +277,8 @@ def _retain_assignment_instructions(result, course_id, records, docs, snapshot):
         instructions = resolve_document_reference(record['title'], docs, modules=snapshot.get('modules'))
         instruction_keys.update(d['document_key'] for d in linked if document_role(d) != 'solution')
         instruction_keys.update(instructions['document_keys'])
-    return attach_instructions(result, course_id, records, docs, instruction_keys)
+    # The syllabus's course-wide AI-use rules apply to every resolved assignment (EC-015).
+    return attach_instructions(result, course_id, records, docs, instruction_keys, policy_keys=course_policy_keys(docs))
 
 
 MATERIAL_ROUTES = {"course_material", "course_policy_material", "assignment_material", "document_material",
@@ -252,6 +306,7 @@ def route_query(course_id, question, understanding, *, store=None, provider=None
     store = store or default_store()
     result = _route_query(course_id, question, understanding, store=store, provider=provider,
                           conversation_context=conversation_context, now=now)
+    result = _policy_for_retrieved_work(result, course_id, question, store)
     if result.get("retrieval_route") in MATERIAL_ROUTES and not result.get("notice"):
         notice = material_notice(store.load_course(course_id))
         if notice:
@@ -499,5 +554,15 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
             instructions = resolve_document_reference(f'{kind} {number}',docs,modules=snapshot.get('modules'))
             instruction_keys.update(instructions['document_keys'])
         instruction_keys = {d['document_key'] for d in docs if d['document_key'] in instruction_keys and document_role(d) != 'solution'}
-        result = attach_instructions(result,course_id,[],docs,instruction_keys)
+        result = attach_instructions(result,course_id,[],docs,instruction_keys,policy_keys=course_policy_keys(docs),
+                                     work_titles=_work_titles(keys,docs,explicit),
+                                     assigned_work=bool(assignment_intent or explicit.get('family')) or _solution_material(keys,docs))
+    elif keys:
+        # A named work file (e.g. a project specification) has no assignment record,
+        # but a course-wide syllabus rule still covers it. Lecture material is not assigned work.
+        result = attach_instructions(result,course_id,[],docs,set(),policy_keys=course_policy_keys(docs),
+                                     work_titles=_work_titles(keys,docs,explicit),assigned_work=_solution_material(keys,docs))
+    if result.get('assignment_policy') and _solution_material(keys,docs):
+        # Asking for a solutions file is asking for the solutions, however the request is worded.
+        result['assignment_policy'] = {**result['assignment_policy'], 'solution_material': True}
     return {**result, "query_understanding": plan, "retrieval_route": "document_material" if keys else "course_material"}
