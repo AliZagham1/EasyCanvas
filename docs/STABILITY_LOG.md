@@ -400,3 +400,14 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
 - Safeguard: an uncited block that is unlabeled, empty, or poses as a source (URL or `[S#]`) is now dropped instead of failing the answer; valid cited blocks are kept, unknown citations still fail, and an answer with no cited block still fails. 735 backend tests pass (`test_partial_answers.py`, 9 tests).
 - One live streaming request, "solve lab 3" (CSE 3320, Vision disabled, no retry): status `answered`, route `assignment_material`, no validation error, `warnings` empty. Four blocks: three cited to the lab handout and starter code (S9; S1, S2, S8, S9; S3) and one labeled general-background block with no source. Tokens: 1,699 + 6,339 input and 302 + 783 output; cost about USD 0.0013 (query understanding 0.00021, embedding 0.0000003, answer 0.00103).
 - Not checked live: the restricted-course refusal (covered by unit tests only) and the claims in the answer against the source text.
+
+## EC-021 — Stale-version notice said an update was "being prepared" when automatic updates were off
+
+- Date: 2026-11-17
+- Status: **Fixed offline.** Unit tests (5 new) pass; no paid calls were made.
+- Symptom: with Settings > automatic search updates OFF, a changed file kept answering from its previous (retained) version, and the answer's warning said "An updated version ... is still being prepared for search". Nothing was being prepared, so the warning implied a refresh that would never happen without a manual update. (An earlier analysis wrongly concluded there was no warning at all; the warning existed but was misleading.)
+- Root cause: `freshness_limitations` chose one message for every retained previous version and had no knowledge of the automatic-update setting.
+- Fix: `IngestionStore._apply_served_versions` tags retained previous versions with `index_paused` when `auto_index` is off (carried through chunk and source metadata); `document_quality_service.freshness_limitations` then returns `PREVIOUS_VERSION_PAUSED_MESSAGE` ("... has not been indexed because automatic search updates are off; the answer uses the previous version. Use Update course search in Settings to refresh it."). With updates on, the original message is unchanged. The warning is backend-built, not model-written.
+- Files: `backend/app/ingestion_store.py`, `backend/app/document_quality_service.py`, `backend/tests/test_stale_answer_notice.py`, `docs/specs/ingestion-pipeline.md`.
+- Not changed: retrieval still serves the previous version until the replacement is indexed (intended: it keeps material searchable).
+

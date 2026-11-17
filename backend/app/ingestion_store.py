@@ -509,6 +509,8 @@ class IngestionStore:
             return documents
         from backend.app import chunking_service
         embedded = self._embedded_hashes(course_id, configuration)
+        # With automatic updates off, nothing is "being prepared": the previous version stays until the user updates.
+        paused = self.load_settings().get('auto_index', True) is False
         result = []
         for document in documents:
             retained = stored.get(document['document_key'])
@@ -530,6 +532,7 @@ class IngestionStore:
             previous.update({key: document.get(key) for key in ('title', 'url', 'references', 'module_id', 'module_name', 'source_role')
                              if key in document})
             previous['served_version'] = 'previous'
+            previous['index_paused'] = paused
             previous['_served_chunk_rows'] = previous_rows
             result.append(previous)
         return result
@@ -773,7 +776,7 @@ class IngestionStore:
                 "module_id", "module_name", "references", "source_role", "status", "warnings", "extractor_version",
                 "content_hash",
                 "cache_status", "refresh_status", "last_successful_refresh", "last_refresh_error",
-                "newer_version_unavailable", "served_version",
+                "newer_version_unavailable", "served_version", "index_paused",
             )})
             chunk["original_filename"] = (document.get("metadata") or {}).get("filename") or document.get("title")
             chunk["locations"] = json.loads(row["locations_json"])

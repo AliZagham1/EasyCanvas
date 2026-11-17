@@ -261,7 +261,10 @@ substitutes for a hard-blocked document.
 Copies are pruned after successful indexing, at commit and during chunking.
 Indexing status counts the latest (replacement) work, so pending passages stay
 visible. With automatic updates OFF, the previous version keeps serving until
-Update course search runs.
+Update course search runs. Answers that use a retained previous version always carry
+a backend-built warning: "still being prepared for search" when automatic updates are on,
+or "has not been indexed because automatic search updates are off ... Use Update course
+search" when they are off (the source is tagged `index_paused`).
 
 A chunker-version change still rebuilds every set without a previous copy. That
 is developer-initiated and out of scope for EC-012.

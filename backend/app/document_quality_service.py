@@ -10,12 +10,15 @@ NEWER_VERSION_MESSAGE = ("Canvas has a newer version of this material that could
                          "the answer uses the previous version.")
 PREVIOUS_VERSION_MESSAGE = ("An updated version of this material is still being prepared for search; "
                             "the answer uses the previous version.")
+PREVIOUS_VERSION_PAUSED_MESSAGE = ("An updated version of this material has not been indexed because automatic search "
+                                   "updates are off; the answer uses the previous version. "
+                                   "Use Update course search in Settings to refresh it.")
 
 
 def freshness_limitations(origin):
     """Say when a cited source is a retained/previous version rather than current."""
     if origin.get("served_version") == "previous":
-        return [PREVIOUS_VERSION_MESSAGE]
+        return [PREVIOUS_VERSION_PAUSED_MESSAGE if origin.get("index_paused") else PREVIOUS_VERSION_MESSAGE]
     if origin.get("cache_status") == "stale_but_usable":
         return [NEWER_VERSION_MESSAGE if origin.get("newer_version_unavailable") else STALE_MESSAGE]
     return []
