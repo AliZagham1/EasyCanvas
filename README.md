@@ -8,6 +8,9 @@ courses, assignments, and accessible course materials.
 
 - Dashboard and Upcoming page with real courses, future unsubmitted assignments,
   due dates/times, loading states, and partial-fetch handling.
+- Smart Priorities: a deterministic, explainable ranking of work across all current
+  courses by deadline urgency, submission status, and (only when Canvas data supports it) an
+  estimated grade weight. No AI calls. See the [Priorities spec](docs/specs/priorities.md).
 - Course-content discovery across accessible Canvas-native sources, including
   syllabus, assignments, modules, pages, files, quizzes, announcements, and discussions.
 - Text extraction from supported PDF, HTML, text/Markdown/CSV, DOCX, PPTX, and
@@ -25,7 +28,7 @@ courses, assignments, and accessible course materials.
   [Study Assistant spec](docs/specs/study-assistant.md) for data boundaries and limits.
 
 Stack: Next.js, React, TypeScript, Tailwind CSS; Python, FastAPI, Requests, and SQLite.
-Priorities, class schedules, study plans, MCP,
+Class schedules, study plans, MCP,
 LangGraph, and PostgreSQL migration are **planned**, not implemented features.
 
 ## Prerequisites

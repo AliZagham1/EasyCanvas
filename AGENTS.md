@@ -50,6 +50,10 @@ The following behavior is currently implemented in the committed repository:
 6. Filtering of upcoming assignments to include only future, unsubmitted work.
 7. Sorting assignments by due date.
 8. A simple development script for testing assignment retrieval against Canvas.
+9. Smart Priorities (`/priorities`, `GET /api/priorities`): deterministic, explainable ranking of
+   current-course assignments. Canvas facts come from `backend/app/priority_service.py`; ranking is
+   `frontend/lib/priorities.ts`. See `docs/specs/priorities.md`. It uses no LLM and never treats
+   unknown grade weight as zero.
 
 Do not assume that course-content ingestion, file processing, RAG, priority scoring, study-plan generation, class-schedule extraction, or AI-agent functionality is implemented unless the relevant code exists in the current working tree.
 

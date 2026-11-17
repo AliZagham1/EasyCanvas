@@ -6,7 +6,7 @@ from backend.app.canvas_service import get_cache_namespace
 import sqlite3
 import requests
 
-from fastapi import FastAPI, HTTPException, Path, Request
+from fastapi import FastAPI, HTTPException, Path, Request, Response
 from pydantic import BaseModel, Field, StrictInt, field_validator
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,6 +16,7 @@ from backend.app.canvas_service import (
     get_upcoming_assignments,
 )
 from backend.app.course_sync_service import CourseSyncService
+from backend.app import priority_service
 from backend.app import rag_service
 from backend.app import retention_service
 from backend.app import search_index_service
@@ -73,6 +74,16 @@ def assignments(course_id: int):
 @app.get("/api/courses/{course_id}/upcoming")
 def upcoming(course_id: int):
     return get_upcoming_assignments(course_id)
+
+
+@app.get("/api/priorities")
+def priorities(response: Response, refresh: bool = False):
+    """Read-only Canvas facts for ranking; refresh=true bypasses the 60-second cache."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return priority_service.get_priorities(refresh=refresh)
+    except (requests.RequestException, ValueError, KeyError):
+        raise HTTPException(status_code=502, detail="Unable to load assignments from Canvas.")
 
 
 @app.get("/api/ingestion")
