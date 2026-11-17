@@ -318,8 +318,16 @@ Rates are dated standard-processing estimates in `api_usage_service.py`, includi
 reported cached-input discounts. These figures are **not OpenAI account billing**.
 OpenAI's billing dashboard is the authoritative account total; calls made before
 local tracking or outside EasyCanvas are not included. For easier comparison in
-the future, use a dedicated OpenAI project/API key for EasyCanvas. This is an
-optional setup recommendation; the app does not change projects or credentials.
+the future, use a dedicated OpenAI project/API key for EasyCanvas.
+
+**Bring your own key.** Settings > **OpenAI API key** lets each student paste their own key.
+The backend checks it with OpenAI using a free "list models" request, saves it only in the
+local database file (not encrypted, mode 0600, never sent back to the browser or logged),
+and uses it for embeddings, the Study Assistant and Vision without a restart. A saved key
+wins over `OPENAI_API_KEY` in `.env`; **Remove saved key** falls back to `.env`. Every
+usage record carries a one-way fingerprint and the last 4 characters of the key that made
+it, so the usage panel shows totals for the key in use and lists earlier keys under
+**Usage by API key**; changing keys never deletes or merges earlier usage.
 
 The optional monthly USD warning starts unset, is persisted locally, and does not
 block calls or act as a hard spending cap. Settings has two independent switches:

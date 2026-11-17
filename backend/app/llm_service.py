@@ -44,9 +44,10 @@ class OpenAIAnswerProvider:
         self.model = model if model is not None else os.getenv("EASYCANVAS_ANSWER_MODEL", "gpt-6-luna")
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("Answer model must be a nonempty model identifier.")
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        from backend.app.openai_key_service import resolve_api_key
+        self._api_key = api_key or resolve_api_key(getattr(usage_recorder, "store", None))[0]
         if not self._api_key:
-            raise ValueError("Set OPENAI_API_KEY in the local .env before asking questions.")
+            raise ValueError("Add your OpenAI API key in Settings (or set OPENAI_API_KEY in .env) before asking questions.")
         from backend.app.api_usage_service import UsageRecorder
         self.usage_recorder = usage_recorder if usage_recorder is not None else UsageRecorder()
 

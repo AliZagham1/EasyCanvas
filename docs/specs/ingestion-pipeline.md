@@ -392,8 +392,10 @@ The chunking stage itself makes no embedding, OCR, or RAG calls.
 ## Incremental embeddings and semantic retrieval
 
 `embedding_service.py` uses OpenAI `text-embedding-3-small` at 1,536 dimensions.
-Set `OPENAI_API_KEY` in the local root `.env`; the key is never saved in SQLite
-or included in reports. This stage uses the existing `requests` dependency.
+Provide your OpenAI key either in Settings (**OpenAI API key**, saved only in the local
+SQLite file, mode 0600, in its own `api_credentials` table and never returned by any
+API, logged or included in reports) or as `OPENAI_API_KEY` in the local root `.env`.
+A key saved in Settings wins; removing it falls back to `.env`. This stage uses the existing `requests` dependency.
 After successful ingestion saves current chunks, `search_index_service.py` queues
 only missing eligible inputs. The existing background worker drains saved jobs
 and recovers interrupted jobs at startup. Automatic updates are persisted in

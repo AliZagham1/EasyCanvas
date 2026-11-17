@@ -18,6 +18,8 @@ from backend.app.canvas_service import (
 from backend.app.course_sync_service import CourseSyncService
 from backend.app import priority_service
 from backend.app import visual_document_service
+from backend.app import openai_key_service
+from starlette.concurrency import run_in_threadpool
 from backend.app import rag_service
 from backend.app import retention_service
 from backend.app import search_index_service
@@ -166,7 +168,7 @@ def _settings_view(store, settings=None):
 def search_settings():
     try:
         store = default_store()
-        return {'settings': _settings_view(store), 'usage': usage_summary(store)}
+        return {'settings': _settings_view(store), 'usage': usage_summary(store), 'api_key': openai_key_service.key_status(store)}
     except (OSError, sqlite3.Error, ValueError):
         raise HTTPException(status_code=503, detail='Search settings are unavailable. Please retry.') from None
 
@@ -189,9 +191,46 @@ def change_search_settings(body: SearchSettings, request: Request):
             service = getattr(request.app.state, 'course_sync', None)
             if service:
                 service.ensure_worker()
-        return {'settings': _settings_view(store, settings), 'usage': usage_summary(store)}
+        return {'settings': _settings_view(store, settings), 'usage': usage_summary(store), 'api_key': openai_key_service.key_status(store)}
     except (OSError, sqlite3.Error, ValueError):
         raise HTTPException(status_code=503, detail='Search settings could not be saved. Please retry.') from None
+
+
+@app.get('/api/openai-key')
+def openai_key_status():
+    """Whether a key is in use and its last 4 characters. The key itself is never returned."""
+    try:
+        return openai_key_service.key_status(default_store())
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='The API key status is unavailable. Please retry.') from None
+
+
+@app.put('/api/openai-key')
+async def save_openai_key(request: Request):
+    """Verify the key with OpenAI (a free request), then save it locally. Errors never echo the key."""
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=422, detail='Send the key as JSON: {"api_key": "..."}.') from None
+    if not isinstance(body, dict) or set(body) != {'api_key'}:
+        raise HTTPException(status_code=422, detail='Send the key as JSON: {"api_key": "..."}.')
+    try:
+        return await run_in_threadpool(openai_key_service.save_key, default_store(), body['api_key'])
+    except openai_key_service.KeyRejected as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except openai_key_service.KeyUnverifiable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from None
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='The API key could not be saved. Please retry.') from None
+
+
+@app.delete('/api/openai-key')
+def remove_openai_key():
+    """Forget the saved key; EasyCanvas falls back to OPENAI_API_KEY in .env if one is set."""
+    try:
+        return openai_key_service.remove_key(default_store())
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='The saved API key could not be removed. Please retry.') from None
 
 
 @app.get('/api/search/status')

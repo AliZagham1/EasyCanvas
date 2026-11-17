@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cleanupCourses, fetchStorage, formatStorageBytes, keepCourse } from "@/lib/storage";
 import type { StoragePreview } from "@/lib/storage";
+import OpenAIKeyCard from "../components/openai-key-card";
 import SearchSettings from "../components/search-settings";
 
 export default function SettingsPage() {
@@ -77,6 +78,7 @@ export default function SettingsPage() {
       <h1 className="page-title">Settings</h1>
       <p className="page-description">Manage course search, API usage, and the materials saved on this computer.</p>
     </div></header>
+    <OpenAIKeyCard />
     <SearchSettings />
     <section aria-labelledby="storage-title">
       <div className="storage-heading">

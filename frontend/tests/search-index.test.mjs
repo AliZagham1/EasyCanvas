@@ -60,3 +60,37 @@ test('vision choice is saved on its own without touching the embedding setting',
   assert.equal(calls[0][1].method,'PATCH');
   assert.deepEqual(JSON.parse(calls[0][1].body),{vision_enabled:false});
 });
+test('API key client: PUT sends the key once, errors show only the backend message, status is masked text', async () => {
+  const calls=[]; const previous=global.fetch;
+  global.fetch=async (url, init) => {calls.push([url,init]); return init.method==='PUT'
+    ? {ok:false,json:async()=>({detail:'OpenAI rejected this key. Check it and try again.'})}
+    : {ok:true,json:async()=>({configured:true,source:'saved',hint:'2222'})};};
+  try {
+    await assert.rejects(api.saveApiKey('sk-secret-value-1234567890'), error => {
+      assert.equal(error.message,'OpenAI rejected this key. Check it and try again.');
+      assert.equal(error.message.includes('secret'),false);
+      return true;
+    });
+    assert.deepEqual(await api.removeApiKey(),{configured:true,source:'saved',hint:'2222'});
+    await api.getApiKeyStatus();
+  } finally {global.fetch=previous;}
+  assert.equal(calls[0][0],'http://127.0.0.1:8000/api/openai-key');
+  assert.equal(calls[0][1].method,'PUT');
+  assert.deepEqual(JSON.parse(calls[0][1].body),{api_key:'sk-secret-value-1234567890'});
+  assert.equal(calls[0][1].cache,'no-store');
+  assert.equal(calls[1][1].method,'DELETE');
+  assert.equal(calls[1][1].body,undefined);
+  assert.equal(calls[2][1].method,'GET');
+});
+test('API key client falls back to a generic message and never invents key text', async () => {
+  const previous=global.fetch; global.fetch=async()=>({ok:false,json:async()=>{throw new Error('not json');}});
+  try { await assert.rejects(api.saveApiKey('sk-x'), /API key request failed/); } finally {global.fetch=previous;}
+});
+test('key descriptions say where the key comes from and show only the last four characters', () => {
+  assert.match(api.describeApiKey(null),/Checking/);
+  assert.match(api.describeApiKey({configured:false,source:null,hint:null}),/No API key is set/);
+  assert.equal(api.describeApiKey({configured:true,source:'saved',hint:'2222'}),'Using the key you saved here ending 2222.');
+  assert.equal(api.describeApiKey({configured:true,source:'environment',hint:'1111'}),'Using the key from the backend .env file ending 1111.');
+  assert.equal(api.keyLabel('1111'),'Key ending 1111');
+  assert.equal(api.keyLabel(null),'Before key tracking');
+});

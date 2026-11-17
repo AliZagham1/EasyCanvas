@@ -266,7 +266,17 @@ class IngestionStore:
                     pricing_version TEXT NOT NULL,
                     PRIMARY KEY (namespace, operation_id)
                 );
+                CREATE TABLE IF NOT EXISTS api_credentials (
+                    namespace TEXT NOT NULL, provider TEXT NOT NULL,
+                    api_key TEXT NOT NULL, saved_at TEXT NOT NULL,
+                    PRIMARY KEY (namespace, provider)
+                );
             """)
+            # Usage records carry a one-way key fingerprint and the key's last 4 characters, never the key.
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(api_usage)")}
+            for name in ("credential_fingerprint", "credential_hint"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE api_usage ADD COLUMN {name} TEXT")
         self.path.chmod(0o600)
 
     @contextmanager
@@ -907,8 +917,35 @@ class IngestionStore:
         fields = ('operation_id', 'recorded_at', 'operation', 'feature', 'model', 'input_tokens',
                   'output_tokens', 'cached_input_tokens', 'estimated_cost_usd', 'pricing_version')
         with self._connection() as connection:
-            connection.execute('INSERT OR IGNORE INTO api_usage VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                               (self.namespace, *(entry[key] for key in fields)))
+            connection.execute(
+                'INSERT OR IGNORE INTO api_usage (namespace, ' + ', '.join(fields) + ', credential_fingerprint, credential_hint) '
+                'VALUES (?, ' + ', '.join('?' * len(fields)) + ', ?, ?)',
+                (self.namespace, *(entry[key] for key in fields), entry.get('credential_fingerprint'), entry.get('credential_hint')))
+
+    def tag_untagged_api_usage(self, fingerprint, hint):
+        """Attribute records made before key tracking to the key that was active then (one-way, idempotent)."""
+        with self._connection() as connection:
+            if connection.execute('SELECT 1 FROM api_usage WHERE namespace=? AND credential_fingerprint IS NULL LIMIT 1',
+                                  (self.namespace,)).fetchone() is None:
+                return
+            connection.execute('UPDATE api_usage SET credential_fingerprint=?, credential_hint=? WHERE namespace=? AND credential_fingerprint IS NULL',
+                               (fingerprint, hint, self.namespace))
+
+    def save_api_key(self, api_key, provider='openai'):
+        """Store the user's key locally (database file is mode 0600). Never returned by any API."""
+        with self._connection() as connection:
+            connection.execute('INSERT OR REPLACE INTO api_credentials VALUES (?, ?, ?, ?)',
+                               (self.namespace, provider, api_key, datetime.now(timezone.utc).isoformat()))
+
+    def load_api_key(self, provider='openai'):
+        with self._connection() as connection:
+            row = connection.execute('SELECT api_key FROM api_credentials WHERE namespace=? AND provider=?',
+                                     (self.namespace, provider)).fetchone()
+        return row[0] if row else None
+
+    def delete_api_key(self, provider='openai'):
+        with self._connection() as connection:
+            connection.execute('DELETE FROM api_credentials WHERE namespace=? AND provider=?', (self.namespace, provider))
 
     def load_api_usage(self):
         with self._connection() as connection:

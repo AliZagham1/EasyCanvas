@@ -97,7 +97,8 @@ class OpenAIVisionExtractionProvider:
         self.configuration = configuration or VisionConfiguration(model=os.getenv("EASYCANVAS_VISION_MODEL", "gpt-6-luna"))
         if self.configuration.provider != "openai":
             raise ValueError("This Vision provider supports only OpenAI")
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        from backend.app.openai_key_service import resolve_api_key
+        self._api_key = api_key or resolve_api_key(getattr(usage_recorder, "store", None))[0]
         if not self._api_key:
             raise VisionProviderError("Vision API key is not configured")
         from backend.app.api_usage_service import UsageRecorder

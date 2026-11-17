@@ -457,3 +457,15 @@ a.priority-title:focus-visible { outline: 2px solid var(--accent); outline-offse
 }
 .search-impact-notice { margin: 4px 0 20px; line-height: 1.6; }
 .search-impact-notice strong { color: var(--foreground); font-weight: 600; }
+.api-key-card { margin: 0 0 28px; }
+.api-key-card .assistant-hint { max-width: 78ch; margin-top: 6px; }
+.api-key-form { margin: 16px 0 8px; }
+.api-key-form label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+.api-key-form > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.api-key-form input { flex: 1 1 320px; min-width: 0; max-width: 520px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font: inherit; font-size: 14px; }
+.api-key-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.api-usage-keys { margin: 12px 0; }
+.api-usage-keys ul { list-style: none; margin: 8px 0; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.api-usage-keys li { display: grid; grid-template-columns: minmax(0, 1.2fr) 1fr 1fr; gap: 4px 16px; padding: 10px 14px; border-top: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+.api-usage-keys li:first-child { border-top: 0; }
+@media (max-width: 640px) { .api-usage-keys li { grid-template-columns: minmax(0, 1fr); } }

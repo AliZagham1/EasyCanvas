@@ -14,10 +14,24 @@ function preferences(warning: number|null = null, automatic = true, vision = tru
     total:{...total,estimated_cost_usd:7.42,calls:12},...features,monthly_breakdown:features,
     warning_reached:warning!==null && 3.42>=warning,recording_started_at:'2026-11-03T12:00:00Z',notice:'Local estimate'}};
 }
-async function settings(page: Page, options: {warning?:number|null; automatic?:boolean; vision?:boolean; status?:string; readyOnPoll?:boolean; saveFails?:boolean} = {}) {
-  let data = preferences(options.warning??null, options.automatic??true, options.vision??true);
+async function settings(page: Page, options: {keyStatus?:{configured:boolean;source:string|null;hint:string|null}; byKey?:unknown[]; warning?:number|null; automatic?:boolean; vision?:boolean; status?:string; readyOnPoll?:boolean; saveFails?:boolean} = {}) {
+  let data: ReturnType<typeof preferences> & {api_key?: unknown} = preferences(options.warning??null, options.automatic??true, options.vision??true);
+  let keyStatus = options.keyStatus ?? {configured:true,source:'environment',hint:'1111'};
+  const keyCalls: {method:string;body:{api_key?:string}|null}[] = [];
+  data.api_key = keyStatus; if(options.byKey) (data.usage as {by_key?: unknown[]}).by_key = options.byKey;
   let status = {...course(options.status),automatic:data.settings.auto_index};
   let polls=0, indexPosts=0;
+  await page.route('**/api/openai-key', route => {
+    const method=route.request().method(); const body=method==='PUT' ? route.request().postDataJSON() : null;
+    keyCalls.push({method,body});
+    if(method==='PUT') {
+      if(String(body.api_key).startsWith('sk-bad')) return route.fulfill({status:422,json:{detail:'OpenAI rejected this key. Check it and try again.'}});
+      keyStatus={configured:true,source:'saved',hint:String(body.api_key).slice(-4)};
+    }
+    if(method==='DELETE') keyStatus={configured:true,source:'environment',hint:'1111'};
+    data.api_key=keyStatus;
+    return route.fulfill({json:keyStatus});
+  });
   await page.route('**/api/search/settings', route => {
     if(route.request().method()==='PATCH') {
       if(options.saveFails) return route.fulfill({status:503,json:{detail:'private provider detail'}});
@@ -38,7 +52,7 @@ async function settings(page: Page, options: {warning?:number|null; automatic?:b
   });
   await page.route('**/api/storage', route => route.fulfill({json:{courses:[],preview_id:'a'.repeat(64),eligible_bytes:0}}));
   await page.goto('/settings');
-  return {getIndexPosts:()=>indexPosts};
+  return {getIndexPosts:()=>indexPosts,keyCalls};
 }
 
 test('switch, compact course counts, document details, and manual queue persist', async ({page}) => {
@@ -172,4 +186,60 @@ test('an older backend without the vision setting does not show a false "Vision 
   await expect(vision).toBeDisabled();
   await expect(page.locator('.search-impact-notice')).toHaveCount(0);
   await expect(page.getByText('Restart the backend to manage this here.')).toBeVisible();
+});
+
+test('saving a key verifies it, masks it, clears the field, and never shows the key again',async({page})=>{
+  const calls=await settings(page);
+  await expect(page.getByText('Using the key from the backend .env file ending 1111.')).toBeVisible();
+  const input=page.getByLabel('Use your own key');
+  await expect(input).toHaveAttribute('type','password');
+  await expect(page.getByRole('button',{name:'Save and verify'})).toBeDisabled();
+  const secret='sk-proj-ZZZZZZZZZZZZZZZZZZZZZZZZZZ7777';
+  await input.fill(secret);
+  await page.getByRole('button',{name:'Save and verify'}).click();
+  await expect(page.getByText('Using the key you saved here ending 7777.')).toBeVisible();
+  await expect(page.getByText('Key verified and saved.')).toBeVisible();
+  await expect(input).toHaveValue('');
+  await expect(page.locator('body')).not.toContainText(secret);
+  expect(await page.content()).not.toContain(secret);
+  expect(calls.keyCalls.find(c=>c.method==='PUT')?.body).toEqual({api_key:secret});
+  await page.reload();
+  await expect(page.locator('body')).not.toContainText(secret);
+  await expect(page.getByRole('button',{name:'Remove saved key'})).toBeVisible();
+});
+
+test('a rejected key shows the backend message and keeps the previous key in use',async({page})=>{
+  await settings(page);
+  await page.getByLabel('Use your own key').fill('sk-bad-KEYKEYKEYKEYKEYKEYKEYKEY');
+  await page.getByRole('button',{name:'Save and verify'}).click();
+  await expect(page.getByRole('alert').filter({hasText:'OpenAI rejected this key. Check it and try again.'})).toBeVisible();
+  await expect(page.getByText('Using the key from the backend .env file ending 1111.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Remove saved key'})).toHaveCount(0);
+});
+
+test('removing the saved key returns to the .env key',async({page})=>{
+  await settings(page,{keyStatus:{configured:true,source:'saved',hint:'2222'}});
+  await expect(page.getByText('Using the key you saved here ending 2222.')).toBeVisible();
+  await page.getByRole('button',{name:'Remove saved key'}).click();
+  await expect(page.getByText('Using the key from the backend .env file ending 1111.')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Remove saved key'})).toHaveCount(0);
+});
+
+test('no key set explains what needs one',async({page})=>{
+  await settings(page,{keyStatus:{configured:false,source:null,hint:null}});
+  await expect(page.getByText(/No API key is set/)).toBeVisible();
+});
+
+test('a previous key keeps its own dollars and calls in the usage list',async({page})=>{
+  const mk=(cost:number,calls:number)=>({...total,estimated_cost_usd:cost,calls});
+  await settings(page,{keyStatus:{configured:true,source:'saved',hint:'2222'},byKey:[
+    {hint:'2222',current:true,this_month:mk(0,0),total:mk(0,0),last_used:'2026-11-17T22:00:00Z'},
+    {hint:'1111',current:false,this_month:mk(0.29,750),total:mk(0.29,750),last_used:'2026-11-17T21:00:00Z'}]});
+  await page.getByText('Usage by API key (2)').click();
+  const rows=page.locator('.api-usage-keys li');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('Key ending 2222 (in use)');
+  await expect(rows.nth(0)).toContainText('$0.00 this month · 0 calls');
+  await expect(rows.nth(1)).toContainText('Key ending 1111');
+  await expect(rows.nth(1)).toContainText('$0.29 this month · 750 calls');
 });

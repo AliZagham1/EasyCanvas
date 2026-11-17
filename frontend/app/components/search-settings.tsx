@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { formatCourseCode } from "@/lib/course-label";
-import { compactSearchStatus, formatApiCost, getSearchCourses, getSearchSettings, saveSearchSettings, searchImpactNotice, updateSearch, usageWarningProgress } from "@/lib/search-index";
+import { API_KEY_CHANGED_EVENT, compactSearchStatus, keyLabel, formatApiCost, getSearchCourses, getSearchSettings, saveSearchSettings, searchImpactNotice, updateSearch, usageWarningProgress } from "@/lib/search-index";
 import type { CourseIndex, SearchPreferences } from "@/lib/search-index";
 
 export default function SearchSettings() {
@@ -28,7 +28,9 @@ export default function SearchSettings() {
       finally { if (!controller.signal.aborted) timer = setTimeout(() => void load(), updating ? 3000 : 10000); }
     }
     void load(true);
-    return () => { controller.abort(); clearTimeout(timer); };
+    const refresh = () => { clearTimeout(timer); void load(); };   // the key card changed the active key: refresh usage now
+    window.addEventListener(API_KEY_CHANGED_EVENT, refresh);
+    return () => { controller.abort(); clearTimeout(timer); window.removeEventListener(API_KEY_CHANGED_EVENT, refresh); };
   }, []);
 
   async function save(changes: {auto_index?: boolean; vision_enabled?: boolean; monthly_warning_usd?: number | null}) {
@@ -159,6 +161,15 @@ export default function SearchSettings() {
           <div><dt>Input tokens</dt><dd>{usage.this_month.input_tokens.toLocaleString()}</dd></div>
           <div><dt>Output tokens</dt><dd>{usage.this_month.output_tokens.toLocaleString()}</dd></div>
         </dl>
+        {usage.by_key && usage.by_key.length > 1 && <details className="api-usage-keys">
+          <summary className="text-link">Usage by API key ({usage.by_key.length})</summary>
+          <ul>{usage.by_key.map(item => <li key={item.hint ?? "untracked"}>
+            <span>{keyLabel(item.hint)}{item.current ? " (in use)" : ""}</span>
+            <span>{formatApiCost(item.this_month.estimated_cost_usd)} this month · {item.this_month.calls.toLocaleString()} calls</span>
+            <span>{formatApiCost(item.total.estimated_cost_usd)} total · {item.total.calls.toLocaleString()} calls</span>
+          </li>)}</ul>
+          <p className="assistant-hint">Keys you stopped using keep their own totals. The amounts above are for the key currently in use.</p>
+        </details>}
         <div className="api-usage-footnote">
           <p>{began ? `Tracking began ${began}. ${formatApiCost(usage.total.estimated_cost_usd)} tracked since then.` : "Tracking starts with your first recorded API call."}</p>
           {usage.this_month.unpriced_calls > 0 && <p>{usage.this_month.unpriced_calls} calls this month have no complete cost estimate and are excluded from the amount above.</p>}

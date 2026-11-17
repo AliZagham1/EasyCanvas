@@ -46,21 +46,34 @@ class UsageRecorder:
         identity = _field(response, 'id') or request_id
         if not isinstance(identity, str) or not identity:
             identity = uuid.uuid4().hex
-        entry = dict(operation_id=identity, recorded_at=datetime.now(timezone.utc).isoformat(),
-                     feature=feature, operation=operation, model=model, input_tokens=incoming,
-                     output_tokens=outgoing, cached_input_tokens=cached, estimated_cost_usd=cost,
-                     pricing_version=PRICING_VERSION)
         try:
-            (self.store or default_store()).record_api_usage(entry)
+            store = self.store or default_store()
+            from backend.app.openai_key_service import active_identity
+            key = active_identity(store) or {}
+            entry = dict(operation_id=identity, recorded_at=datetime.now(timezone.utc).isoformat(),
+                         feature=feature, operation=operation, model=model, input_tokens=incoming,
+                         output_tokens=outgoing, cached_input_tokens=cached, estimated_cost_usd=cost,
+                         pricing_version=PRICING_VERSION, credential_fingerprint=key.get('fingerprint'), credential_hint=key.get('hint'))
+            store.record_api_usage(entry)
         except (sqlite3.Error, OSError, ValueError):
             # Accounting must not turn a valid answer into a failed conversation.
             logging.getLogger(__name__).warning('Local API usage could not be recorded.')
 
 
 def usage_summary(store, *, now=None):
-    """Aggregate recorded calls using the server's local calendar; old calls are not inferred."""
+    """Aggregate recorded calls using the server's local calendar; old calls are not inferred.
+
+    Headline totals cover the OpenAI key currently in use; every other key keeps its own totals in `by_key`.
+    """
+    from backend.app.openai_key_service import active_identity, attribute_existing_usage
     local = (now or datetime.now().astimezone()).astimezone()
-    rows = store.load_api_usage()
+    try:
+        attribute_existing_usage(store)  # records made before key tracking belong to the key active until now
+    except (sqlite3.Error, OSError):
+        pass
+    all_rows = store.load_api_usage()
+    current = active_identity(store)
+    rows = [row for row in all_rows if row.get('credential_fingerprint') == current['fingerprint']] if current else all_rows
     def total(items):
         return {'estimated_cost_usd': round(sum(row['estimated_cost_usd'] or 0 for row in items), 8),
                 'calls': len(items), 'unpriced_calls': sum(row['estimated_cost_usd'] is None for row in items),
@@ -75,6 +88,17 @@ def usage_summary(store, *, now=None):
             today.append(row)
     all_time = total(rows)
     warning = store.load_settings()['monthly_warning_usd']
+    in_month = lambda row: (lambda d: (d.year, d.month) == (local.year, local.month))(
+        datetime.fromisoformat(row['recorded_at']).astimezone(local.tzinfo))
+    keys = {}
+    for row in all_rows:
+        keys.setdefault(row.get('credential_fingerprint'), []).append(row)
+    by_key = [{'hint': group[-1].get('credential_hint') if fingerprint else None,
+               'current': bool(current) and fingerprint == current['fingerprint'],
+               'this_month': total([row for row in group if in_month(row)]), 'total': total(group),
+               'last_used': group[-1]['recorded_at']} for fingerprint, group in keys.items()]
+    # The key in use first, then the rest most recently used first.
+    by_key.sort(key=lambda item: (not item['current'], -datetime.fromisoformat(item['last_used']).timestamp()))
     return {'today': total(today), 'this_month': total(month), 'total': all_time,
             'monthly_breakdown': {
                 'embedding': total([row for row in month if row['feature'] == 'embedding']),
@@ -87,5 +111,5 @@ def usage_summary(store, *, now=None):
             'monthly_warning_usd': warning,
             'warning_reached': warning is not None and total(month)['estimated_cost_usd'] >= warning,
             'recording_started_at': rows[0]['recorded_at'] if rows else None,
-            'timezone': str(local.tzinfo), 'pricing_version': PRICING_VERSION,
-            'notice': "Estimated from API calls recorded by EasyCanvas. OpenAI's billing dashboard is the authoritative account total. Calls made before tracking was enabled or outside EasyCanvas are not included."}
+            'by_key': by_key, 'timezone': str(local.tzinfo), 'pricing_version': PRICING_VERSION,
+            'notice': "Totals are for the OpenAI API key currently in use; other keys are listed separately. Estimated from API calls recorded by EasyCanvas. OpenAI's billing dashboard is the authoritative account total. Calls made before tracking was enabled or outside EasyCanvas are not included."}

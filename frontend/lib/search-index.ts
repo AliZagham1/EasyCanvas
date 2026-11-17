@@ -10,7 +10,11 @@ export type CourseIndex = {
 };
 export type UsageTotal = { estimated_cost_usd: number; calls: number; unpriced_calls: number; input_tokens: number; output_tokens: number };
 export type SearchSettings = { auto_index: boolean; vision_enabled: boolean; vision_from_environment?: boolean; monthly_warning_usd: number | null };
-export type SearchPreferences = { settings: SearchSettings; usage: {
+export type KeyUsage = { hint: string | null; current: boolean; this_month: UsageTotal; total: UsageTotal; last_used: string };
+export type ApiKeyStatus = { configured: boolean; source: "saved" | "environment" | null; hint: string | null };
+export const API_KEY_CHANGED_EVENT = "easycanvas:api-key-changed";
+export type SearchPreferences = { settings: SearchSettings; api_key?: ApiKeyStatus; usage: {
+  by_key?: KeyUsage[];
   today: UsageTotal; this_month: UsageTotal; total: UsageTotal; embedding: UsageTotal;
   vision: UsageTotal; assistant_other: UsageTotal; warning_reached: boolean;
   monthly_breakdown?: {embedding: UsageTotal; vision: UsageTotal; assistant_other: UsageTotal};
@@ -83,4 +87,33 @@ export function searchImpactNotice(embeddingsOn: boolean, visionOn: boolean): st
     "Vision is off. This will affect Study Assistant retrieval and responses.",
     "Scanned pages, images and image-only slides are not read, so the Study Assistant can only use text that can be selected in those files. Answers about diagrams, handwriting or scanned content may be incomplete.",
   ];
+}
+
+async function keyRequest(method: string, body?: unknown, signal?: AbortSignal): Promise<ApiKeyStatus> {
+  const response = await fetch(base + "/openai-key", {
+    method, cache: "no-store", signal,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try { const data = await response.json(); if (typeof data?.detail === "string") detail = data.detail; } catch { /* keep the generic message */ }
+    throw new Error(detail || "The API key request failed. Check the backend and retry.");
+  }
+  return response.json();
+}
+export const getApiKeyStatus = (signal?: AbortSignal) => keyRequest("GET", undefined, signal);
+/** The backend verifies the key with OpenAI (free), saves it locally, and returns only a masked status. */
+export const saveApiKey = (apiKey: string) => keyRequest("PUT", { api_key: apiKey });
+export const removeApiKey = () => keyRequest("DELETE");
+
+export function describeApiKey(status: ApiKeyStatus | null | undefined) {
+  if (!status) return "Checking the API key...";
+  if (!status.configured) return "No API key is set. The Study Assistant, course search and Vision need one.";
+  const ending = status.hint ? ` ending ${status.hint}` : "";
+  return status.source === "saved" ? `Using the key you saved here${ending}.` : `Using the key from the backend .env file${ending}.`;
+}
+
+export function keyLabel(hint: string | null) {
+  return hint ? `Key ending ${hint}` : "Before key tracking";
 }

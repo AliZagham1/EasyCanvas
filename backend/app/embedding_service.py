@@ -52,9 +52,10 @@ class OpenAIEmbeddingProvider:
         if self.configuration.provider != "openai":
             raise ValueError("This provider supports only OpenAI.")
         load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-        self._api_key = api_key or os.getenv("OPENAI_API_KEY")
+        from backend.app.openai_key_service import resolve_api_key
+        self._api_key = api_key or resolve_api_key(getattr(usage_recorder, "store", None))[0]
         if not self._api_key:
-            raise ValueError("Set OPENAI_API_KEY in your local .env before embedding.")
+            raise ValueError("Add your OpenAI API key in Settings (or set OPENAI_API_KEY in .env) before embedding.")
         from backend.app.api_usage_service import UsageRecorder
         self.usage_recorder = usage_recorder if usage_recorder is not None else UsageRecorder()
 
