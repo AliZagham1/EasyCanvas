@@ -498,6 +498,10 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
                                        for ref in d.get("references") or [])]
         linked_for_role = [d for d in linked if (document_role(d) == 'solution') == (intent == 'solve_question')]
         named = resolve_document_reference(("solution for " if intent == "solve_question" else "") + record["title"], docs, modules=snapshot.get('modules'))
+        if intent == "solve_question" and not named['document_keys'] and named['status'] != 'ambiguous':
+            # No file is labelled as a solution. The assignment's own instructions
+            # (e.g. a file in the "Lab 3" module) are still the evidence for the work (EC-018).
+            named = resolve_document_reference(record["title"], docs, modules=snapshot.get('modules'))
         if named.get('module_ids') and named['status'] == 'ambiguous' and not linked_for_role:
             return _notice(course_id, plan, 'Which module do you mean? ' + '; '.join(named['candidates']), clarify=True)
         named_files = [d for d in docs if d['document_key'] in named['document_keys']
