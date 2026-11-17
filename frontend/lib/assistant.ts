@@ -41,9 +41,12 @@ export function answerBasisLabel(response: Pick<AssistantResponse, "answer_basis
   return response.answer_basis === "general_knowledge" ? GENERAL_KNOWLEDGE_LABEL : "";
 }
 
-/** Warnings for the collapsed limitations list; the sync notice is shown on its own. */
-export function limitationWarnings(response: Pick<AssistantResponse, "warnings" | "material_notice">) {
-  return response.warnings.filter((warning) => warning !== response.material_notice);
+/** Marker the backend validates on uncited general-knowledge blocks (rag_service.GENERAL_PREFIX). */
+export const GENERAL_PREFIX = "General background (not from your course material): ";
+
+/** Warnings for the collapsed limitations list; the sync notice is shown on its own and nothing already in the answer is repeated. */
+export function limitationWarnings(response: Pick<AssistantResponse, "warnings" | "material_notice"> & { answer?: string }) {
+  return response.warnings.filter((warning) => warning !== response.material_notice && !(response.answer || "").includes(warning));
 }
 
 export type ConversationSummary = { conversation_id: string; course_id: number; title: string; created_at: string; updated_at: string };

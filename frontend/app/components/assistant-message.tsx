@@ -1,6 +1,5 @@
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { answerBasisLabel, assistantStatusMessage, limitationWarnings } from "@/lib/assistant";
+import AnswerMarkdown from "./answer-markdown";
+import { GENERAL_PREFIX, answerBasisLabel, assistantStatusMessage, limitationWarnings } from "@/lib/assistant";
 import type { AssistantResponse } from "@/lib/assistant";
 import AssistantSources from "./assistant-sources";
 
@@ -22,12 +21,11 @@ export default function AssistantMessage({ turn, courseLabel, retry, busy }: {
       <h2>EasyCanvas</h2>
       {basis && <p className="conversation-basis">{basis}</p>}
       {turn.phase === "error" ? <div className="conversation-error" role="alert"><p>{turn.error}</p><button className="text-link" onClick={retry} disabled={busy}>Retry response</button></div>
+        : final && final.status === "insufficient_context" && final.answer ? <AnswerMarkdown text={final.answer} />
         : final && final.status !== "answered" ? <p>{final.answer || assistantStatusMessage(final.status)}</p>
-        : blocks.length ? blocks.map((text, index) => <div className="conversation-answer-block" key={index}>
-          <div className="conversation-markdown"><Markdown remarkPlugins={[remarkGfm]} skipHtml
-            allowedElements={["p", "strong", "em", "h2", "h3", "h4", "ul", "ol", "li", "pre", "code", "blockquote", "br", "hr", "table", "thead", "tbody", "tr", "th", "td", "del"]} unwrapDisallowed>
-            {text.replace(/\[S\d+(?:\s*[,;]\s*S\d+)*\]/g, "")}
-          </Markdown></div>
+        : blocks.length ? blocks.map((text, index) => <div className={`conversation-answer-block${text.startsWith(GENERAL_PREFIX) ? " conversation-general-block" : ""}`} key={index}>
+          {text.startsWith(GENERAL_PREFIX) && <p className="conversation-general-label">General background — not from your course material</p>}
+          <AnswerMarkdown text={text.startsWith(GENERAL_PREFIX) ? text.slice(GENERAL_PREFIX.length) : text} streaming={turn.phase !== "complete"} />
           {final?.status === "answered" && <div className="conversation-citations" aria-label="Sources for this passage">
             {[...new Set(final.answer_blocks[index]?.source_ids || [])].filter((id) => final.sources.some((source) => source.id === id)).map((id) =>
               <a className="text-link" key={id} href={`#${turn.id}-${id}`} onClick={() => {

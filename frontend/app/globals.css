@@ -403,3 +403,10 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
   .course-search-status { align-items: flex-start; flex-direction: column; gap: 8px; }
   .search-document-list li { flex-direction: column; gap: 2px; }
 }
+.conversation-markdown .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: 14px 0; }
+.conversation-markdown .katex { font-size: 1.05em; }
+.conversation-markdown pre code { white-space: pre; }
+.conversation-markdown ol > li > p, .conversation-markdown ul > li > p { margin: 0; }
+.conversation-markdown li > ol, .conversation-markdown li > ul { margin-block: 6px; }
+.conversation-general-block { padding-left: 12px; border-left: 2px solid var(--border); }
+.conversation-general-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }

@@ -117,3 +117,11 @@ test("the sync notice is shown on its own, not duplicated in limitations", () =>
   assert.deepEqual([...api.limitationWarnings({ warnings: [notice, "images_not_extracted"], material_notice: notice })], ["images_not_extracted"]);
   assert.deepEqual([...api.limitationWarnings({ warnings: ["images_not_extracted"] })], ["images_not_extracted"]);
 });
+
+test("limitation warnings never repeat text already in the answer or the sync notice", () => {
+  const { limitationWarnings, GENERAL_PREFIX } = load(async () => ({}));
+  const shown = limitationWarnings({ answer: "The handout does not list the commands. [S1]", material_notice: "Sync pending.",
+    warnings: ["The handout does not list the commands.", "Sync pending.", "Images in the material were not read."] });
+  assert.deepEqual(shown, ["Images in the material were not read."]);
+  assert.ok(GENERAL_PREFIX.startsWith("General background"));
+});
