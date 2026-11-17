@@ -7,6 +7,7 @@ import { getCourses, getUpcomingAssignments, formatDueDate, getCourseAccent } fr
 import type { Course, Assignment } from "@/lib/coursework";
 import { formatCourseCode } from "@/lib/course-label";
 import AssignmentTable from "./components/assignment-table";
+import NextClassCard from "./components/next-class-card";
 import { useCourseSync } from "@/lib/use-course-sync";
 
 export default function Home() {
@@ -118,6 +119,8 @@ export default function Home() {
           </dd>
         </div>
       </dl>
+
+      <NextClassCard />
 
       {hasPartialCoverage && (
         <p className="coverage-notice" role="status">

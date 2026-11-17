@@ -266,6 +266,14 @@ class IngestionStore:
                     pricing_version TEXT NOT NULL,
                     PRIMARY KEY (namespace, operation_id)
                 );
+                CREATE TABLE IF NOT EXISTS class_meetings (
+                    namespace TEXT NOT NULL, meeting_id TEXT NOT NULL, course_id INTEGER NOT NULL,
+                    status TEXT NOT NULL, kind TEXT NOT NULL, days_json TEXT NOT NULL,
+                    start_time TEXT NOT NULL, end_time TEXT NOT NULL, location TEXT,
+                    source TEXT NOT NULL, source_text TEXT, fingerprint TEXT,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY (namespace, meeting_id)
+                );
                 CREATE TABLE IF NOT EXISTS api_credentials (
                     namespace TEXT NOT NULL, provider TEXT NOT NULL,
                     api_key TEXT NOT NULL, saved_at TEXT NOT NULL,
@@ -930,6 +938,53 @@ class IngestionStore:
                 return
             connection.execute('UPDATE api_usage SET credential_fingerprint=?, credential_hint=? WHERE namespace=? AND credential_fingerprint IS NULL',
                                (fingerprint, hint, self.namespace))
+
+    # ---- class schedule: confirmed meetings and dismissed suggestions (user-owned data) ----
+    _MEETING_FIELDS = ('meeting_id', 'course_id', 'status', 'kind', 'days', 'start_time', 'end_time', 'location',
+                       'source', 'source_text', 'fingerprint', 'created_at', 'updated_at')
+
+    @staticmethod
+    def _meeting(row):
+        record = {key: row[key] for key in row.keys() if key not in ('namespace', 'days_json')}
+        record['days'] = json.loads(row['days_json'])
+        return record
+
+    def list_class_meetings(self, status=None):
+        query, args = 'SELECT * FROM class_meetings WHERE namespace=?', [self.namespace]
+        if status:
+            query += ' AND status=?'
+            args.append(status)
+        with self._connection() as connection:
+            rows = connection.execute(query + ' ORDER BY course_id, start_time, created_at', args).fetchall()
+        return [self._meeting(row) for row in rows]
+
+    def get_class_meeting(self, meeting_id):
+        with self._connection() as connection:
+            row = connection.execute('SELECT * FROM class_meetings WHERE namespace=? AND meeting_id=?',
+                                     (self.namespace, meeting_id)).fetchone()
+        return self._meeting(row) if row else None
+
+    def save_class_meeting(self, record):
+        """Insert or replace one meeting; `record` carries every field in _MEETING_FIELDS."""
+        with self._connection() as connection:
+            connection.execute(
+                'INSERT OR REPLACE INTO class_meetings (namespace, meeting_id, course_id, status, kind, days_json, '
+                'start_time, end_time, location, source, source_text, fingerprint, created_at, updated_at) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (self.namespace, record['meeting_id'], record['course_id'], record['status'], record['kind'],
+                 json.dumps(record['days']), record['start_time'], record['end_time'], record.get('location'),
+                 record['source'], record.get('source_text'), record.get('fingerprint'),
+                 record['created_at'], record['updated_at']))
+
+    def delete_class_meeting(self, meeting_id):
+        with self._connection() as connection:
+            return connection.execute('DELETE FROM class_meetings WHERE namespace=? AND meeting_id=?',
+                                      (self.namespace, meeting_id)).rowcount > 0
+
+    def delete_dismissed_suggestions(self, course_id):
+        with self._connection() as connection:
+            return connection.execute("DELETE FROM class_meetings WHERE namespace=? AND course_id=? AND status='dismissed'",
+                                      (self.namespace, course_id)).rowcount
 
     def save_api_key(self, api_key, provider='openai'):
         """Store the user's key locally (database file is mode 0600). Never returned by any API."""

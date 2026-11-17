@@ -11,6 +11,9 @@ courses, assignments, and accessible course materials.
 - Priorities: a deterministic page showing what is due, when, and what to do first across all
   current courses (overdue, High/Medium/Low by deadline, no-due-date, completed, not actionable). No AI
   calls. See the [Priorities spec](docs/specs/priorities.md).
+- Class Schedule: a weekly grid of class meeting times. Suggestions are read from your syllabi by simple rules (no AI)
+  and always show the quoted line; only times you confirm or type are used. The Dashboard shows your next class.
+  See the [Class Schedule spec](docs/specs/class-schedule.md).
 - Course-content discovery across accessible Canvas-native sources, including
   syllabus, assignments, modules, pages, files, quizzes, announcements, and discussions.
 - Text extraction from supported PDF, HTML, text/Markdown/CSV, DOCX, PPTX, and

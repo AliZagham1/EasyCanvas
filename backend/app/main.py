@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from backend.app.conversation_service import ConversationService, ConversationError
 from backend.app.canvas_service import get_cache_namespace
 import sqlite3
+from typing import Literal
 import requests
 
 from fastapi import FastAPI, HTTPException, Path, Request, Response
@@ -19,6 +20,7 @@ from backend.app.course_sync_service import CourseSyncService
 from backend.app import priority_service
 from backend.app import visual_document_service
 from backend.app import openai_key_service
+from backend.app import schedule_service
 from starlette.concurrency import run_in_threadpool
 from backend.app import rag_service
 from backend.app import retention_service
@@ -194,6 +196,94 @@ def change_search_settings(body: SearchSettings, request: Request):
         return {'settings': _settings_view(store, settings), 'usage': usage_summary(store), 'api_key': openai_key_service.key_status(store)}
     except (OSError, sqlite3.Error, ValueError):
         raise HTTPException(status_code=503, detail='Search settings could not be saved. Please retry.') from None
+
+
+class MeetingFields(BaseModel):
+    model_config = {'extra': 'forbid'}
+    days: list[str] | None = None
+    start_time: str | None = Field(default=None, max_length=5)
+    end_time: str | None = Field(default=None, max_length=5)
+    kind: str | None = Field(default=None, max_length=20)
+    location: str | None = Field(default=None, max_length=schedule_service.MAX_LOCATION * 2)
+
+
+class NewMeeting(MeetingFields):
+    course_id: StrictInt
+    source: Literal['manual', 'syllabus'] = 'manual'
+    source_text: str | None = Field(default=None, max_length=schedule_service.MAX_QUOTE * 2)
+    fingerprint: str | None = Field(default=None, pattern=r'^[0-9a-f]{16}$')
+
+
+class DismissedSuggestion(BaseModel):
+    model_config = {'extra': 'forbid'}
+    course_id: StrictInt
+    fingerprint: str = Field(pattern=r'^[0-9a-f]{16}$')
+
+
+def _schedule_call(action):
+    """Map schedule errors to safe HTTP responses."""
+    try:
+        return action(default_store())
+    except schedule_service.ScheduleError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from None
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='The class schedule is unavailable. Please retry.') from None
+
+
+def _known_course(store, course_id):
+    if course_id not in store.saved_current_course_ids():
+        raise LookupError('Course not found. Sync Canvas first.')
+
+
+@app.get('/api/schedule')
+def class_schedule():
+    """Confirmed meetings plus syllabus suggestions per saved course. Reads saved data only."""
+    return _schedule_call(schedule_service.build_schedule)
+
+
+@app.post('/api/schedule/meetings', status_code=201)
+def add_class_meeting(body: NewMeeting):
+    def create(store):
+        _known_course(store, body.course_id)
+        data = body.model_dump(exclude={'course_id', 'source', 'source_text', 'fingerprint'})
+        return schedule_service.create_meeting(store, body.course_id, data, source=body.source,
+                                               source_text=body.source_text, fingerprint_value=body.fingerprint)
+    return _schedule_call(create)
+
+
+@app.put('/api/schedule/meetings/{meeting_id}')
+def edit_class_meeting(body: MeetingFields, meeting_id: str = Path(pattern=r'^[0-9a-f]{32}$')):
+    return _schedule_call(lambda store: schedule_service.update_meeting(
+        store, meeting_id, body.model_dump(exclude_unset=True)))
+
+
+@app.delete('/api/schedule/meetings/{meeting_id}')
+def delete_class_meeting(meeting_id: str = Path(pattern=r'^[0-9a-f]{32}$')):
+    def delete(store):
+        if not store.delete_class_meeting(meeting_id):
+            raise LookupError('Meeting not found.')
+    _schedule_call(delete)
+    return {'ok': True}
+
+
+@app.post('/api/schedule/suggestions/dismiss')
+def dismiss_schedule_suggestion(body: DismissedSuggestion):
+    def dismiss(store):
+        _known_course(store, body.course_id)
+        schedule_service.dismiss_suggestion(store, body.course_id, body.fingerprint)
+    _schedule_call(dismiss)
+    return {'ok': True}
+
+
+@app.delete('/api/schedule/courses/{course_id}/dismissed')
+def restore_schedule_suggestions(course_id: int = Path(gt=0)):
+    def restore(store):
+        _known_course(store, course_id)
+        store.delete_dismissed_suggestions(course_id)
+    _schedule_call(restore)
+    return {'ok': True}
 
 
 @app.get('/api/openai-key')

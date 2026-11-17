@@ -53,6 +53,8 @@ The following behavior is currently implemented in the committed repository:
 9. Priorities (`/priorities`, `GET /api/priorities`): deterministic, deadline-based view of current-course
    assignments. Canvas facts come from `backend/app/priority_service.py`; classification and sorting are
    `frontend/lib/priorities.ts`. See `docs/specs/priorities.md`. It uses no LLM and does no grade calculation.
+10. Class Schedule (`/class-schedule`, `/api/schedule`): confirmed meeting times with rules-based syllabus suggestions that the
+    student must confirm; manual entry always works. See `docs/specs/class-schedule.md`.
 
 Do not assume that course-content ingestion, file processing, RAG, priority scoring, study-plan generation, class-schedule extraction, or AI-agent functionality is implemented unless the relevant code exists in the current working tree.
 
