@@ -335,3 +335,68 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
   - Repairs recognize English wording only. An unrecognized number phrase is dropped when the plan names the assignment, and rejected when it does not.
   - Other provider failures (timeouts, incomplete responses) are not retried here; they are now logged by class and still fail the question.
 - Related: EC-015 (found during its live verification); the repair deliberately cannot weaken its policy checks.
+
+## EC-017 — Study Assistant shows raw LaTeX and run-together question parts
+
+- Date: 2026-11-17
+- Status: **Fixed offline** (2026-11-17). Unit/render tests, lint, production build and 711 backend tests pass. Not yet checked in a live browser session or with a real model answer (no paid calls were made).
+- Symptom: asking for the questions in a practice PDF showed `\begin{bmatrix}` as text, and parts (a), (b), (c) ran together in one paragraph.
+- Root cause: the frontend rendered answers with `react-markdown` + `remark-gfm` and an element allowlist, with no math support, so any LaTeX the model wrote was displayed as source. The answer prompt only said "readable math", with no delimiter or list convention. The model's output, the stream, and saved conversations all go through the same component, so all were affected equally.
+- Source extraction (checked read-only in the saved database, reported separately, not changed): the saved copy of that PDF holds Unicode math-italic letters and matrices linearized as `[`, one row per line, `]`. Entries are intact; only the 2D layout is lost. There is no LaTeX in the stored text, so the raw LaTeX was produced by the model, not by extraction.
+- Fix:
+  - `frontend/lib/answer-format.ts`: pure text preparation: `\(..\)`, `\[..\]`, bare `\begin{bmatrix}..` and single-dollar math are normalized to `$$` delimiters (currency like "$5 and $10" is left alone); code spans and fences are never touched; citation markers are stripped from prose only; while streaming, an unfinished `$$` is shown as plain text. Math contents are never edited.
+  - `frontend/app/components/answer-markdown.tsx`: one shared renderer (`react-markdown`, `remark-math`, `rehype-katex`, `remark-gfm`). Raw HTML skipped; links, images, forms, scripts blocked; KaTeX runs with `trust: false` and `throwOnError: false`, so bad math falls back to readable text.
+  - `assistant-message.tsx` uses it for live, streamed and saved answers.
+  - `backend/app/rag_service.py`: answer and general prompts now ask for `\(..\)` / `\[..\]` LaTeX, one numbered item per question with each subpart on its own line, exact copying of entries, and reporting garbled math instead of repairing it.
+- New dependencies: `katex`, `remark-math`, `rehype-katex`.
+- Files: `frontend/lib/answer-format.ts`, `frontend/app/components/answer-markdown.tsx`, `frontend/app/components/assistant-message.tsx`, `frontend/app/globals.css`, `backend/app/rag_service.py`, `frontend/tests/answer-render.test.mjs` (12 tests).
+- Remaining risk: no syntax highlighting for code; the model must follow the new prompt for question/subpart layout; linearized matrices from extraction stay linear if the model copies them as text.
+- Related: EC-012 to EC-016 behavior untouched (no routing, retrieval, policy or citation logic changed).
+
+## EC-018 — "Solve Lab N" reports no usable material when the lab's instructions are only in a module file
+
+- Date: 2026-11-17
+- Status: **Fixed** (2026-11-17). Regression tests pass and the routing was confirmed live; a full live answer was not obtained (see remaining risk).
+- Symptom: in CSE 3320, "can you solve lab 3" and "can you solve lab 4" both returned "I could not find usable saved course material to answer this question." although `Lab 3.docx` and `OSProgAssignment4.doc` were saved and readable.
+- Root cause: the Canvas assignments "Lab 3" and "Lab 4" have empty descriptions and no link to a file. Their instructions are module files. For `solve_question` the router searched for files with the title prefixed by "solution for ", which resolves nothing when no file is labelled as a solution, so only the empty assignment record was retrieved (`no_content`). Explain requests use the plain title and were not affected.
+- Fix: `backend/app/retrieval_router.py`: when the "solution for" lookup finds no files and is not ambiguous, resolve the plain assignment title instead. A real solution file is still preferred when one exists.
+- Files: `backend/app/retrieval_router.py`, `backend/tests/test_lab_module_instructions.py` (4 tests).
+- Regression tests: solve requests for two labs find their own module's file; one lab's request does not read the other's file; explain requests unchanged; an AI ban written in the lab file blocks a solve request. The first test fails without the fix; the ban test already passed without it (the lab file was kept for the policy check by an existing path).
+- Verification: 715 backend tests pass. Live (copy of the database, no Vision, real query model, about USD 0.0004): both questions now route to `assignment_material` with passages from `Lab 3.docx` and `OSProgAssignment4.doc`.
+- Remaining risk: a first full live answer to "solve Lab 3" (cost about USD 0.002) used all 2,400 output tokens and the provider reported the response incomplete, so the request failed. Long solution requests can hit that existing output limit; it was not changed here. Lab 3's retrieval also includes other files of its module (a curses PDF and a README).
+
+## EC-019 — Incomplete material produced only a generic "insufficient" message
+
+- Date: 2026-11-17
+- Status: **Fixed offline** (2026-11-17). Unit tests, lint and build pass; no paid live run was made for this change.
+- Symptom: when the answer model judged the retrieved material insufficient (for example "solve lab 3", where the handout describes the work without a complete specification), the student saw only "The retrieved course material is insufficient to answer this question.", with the reason hidden in a collapsed list.
+- Fix:
+  - `backend/app/rag_service.py`: `insufficient_answer()` builds the message in backend code for the shared `_finish_answer()` path (streaming and non-streaming). It states what was found (titles of retrieved documents), what is missing (the model's gap statements, at most 4, each at most 400 characters, never code), and what help remains. Course-specific requirements (commands, formats, grading, deadlines) are stated to come only from course documents; general explanations are offered as labeled general knowledge, and the existing general-concept route labels them.
+  - The model's answer blocks are still discarded, so no unsupported text, citations or solutions reach the student. No extra model call is made.
+  - Under an AI restriction (EC-015) the "general approach" offer is omitted and a notice says the instructor's AI-use rules still apply. A restricted solution request is still refused before generation; that path is unchanged.
+  - The answer prompt asks the model for specific, code-free gap sentences when it returns `insufficient_context`.
+  - `frontend/app/components/assistant-message.tsx`: this status renders through the shared safe Markdown renderer.
+- Files: `backend/app/rag_service.py`, `frontend/app/components/assistant-message.tsx`, `backend/tests/test_insufficient_guidance.py` (9 tests), `frontend/tests/answer-render.test.mjs` (1 added).
+- Remaining risk: the message is only as specific as the model's gap sentences. The "no usable saved material" and clarification notices were not changed. Nothing is generated automatically from general knowledge; the student must ask for that.
+
+## EC-020 — Answers declined or gave no substantive help when material covered only part of a request
+
+- Date: 2026-11-17
+- Status: **Fixed offline** (2026-11-17). Unit tests, lint and build compile pass; no paid live run was made for this change (the next live check is pending approval).
+- Symptom (from the EC-019 live check): the model returned `insufficient_context` for a request its retrieved documents partly covered, saying the material lacked a "specific question" and a complete implementation; the same sentence was shown under "What is missing" and again under "Material limitations"; the gap was generic.
+- Root cause: the answer prompt said "Do not fill evidence gaps with general knowledge" and gave no partial-answer or general-help path, so the model's only exit for incomplete evidence was `insufficient_context`. Validation also required every answer block to be cited, so general explanation could not be returned at all. Limitation text was added to warnings even when the same text was already in the answer.
+- Fix:
+  - `rag_service.py` prompt: answer every supported part; a missing starter project, template or reference solution is not a reason to decline; name the exact missing requirement; `insufficient_context` only when nothing in the evidence is relevant; course-specific facts still come only from evidence; keep simple answers short.
+  - General educational knowledge is allowed in separate blocks with empty `source_ids` that start with the exact label `General background (not from your course material): `. `_validate_answer` accepts an uncited block only with that label, with no URL or `[S#]`, and requires at least one cited block. Block shape and the citation contract are unchanged.
+  - EC-015: under a solution restriction, uncited general blocks are removed before validation, and a restricted solution request is still refused before generation. The "general background" help is never shown in restricted work.
+  - A model limitation already shown in the answer (as a "What is missing" bullet or in a block) is no longer repeated in `warnings`; extraction and material warnings are kept. The UI also hides a warning whose text is already in the answer.
+  - UI: general-background blocks get a visible label and a left rule.
+- Files: `backend/app/rag_service.py`, `frontend/lib/assistant.ts`, `frontend/app/components/assistant-message.tsx`, `frontend/app/globals.css`, `backend/tests/test_partial_answers.py` (9 tests), `frontend/tests/assistant.test.mjs` (1 added).
+- Not changed: token limits (2,400 non-streaming, 4,000 streaming).
+- Remaining risk: the behavior depends on the model following the new prompt; it has not been seen live. The label is a convention checked by the backend, so a model that omits it has its block rejected and the turn fails with the existing "could not complete a validated response" error. Unrestricted courses can now receive general-knowledge implementations for assignments the instructor has not restricted.
+
+### EC-020 live verification (2026-11-17) and safeguard
+
+- Safeguard: an uncited block that is unlabeled, empty, or poses as a source (URL or `[S#]`) is now dropped instead of failing the answer; valid cited blocks are kept, unknown citations still fail, and an answer with no cited block still fails. 735 backend tests pass (`test_partial_answers.py`, 9 tests).
+- One live streaming request, "solve lab 3" (CSE 3320, Vision disabled, no retry): status `answered`, route `assignment_material`, no validation error, `warnings` empty. Four blocks: three cited to the lab handout and starter code (S9; S1, S2, S8, S9; S3) and one labeled general-background block with no source. Tokens: 1,699 + 6,339 input and 302 + 783 output; cost about USD 0.0013 (query understanding 0.00021, embedding 0.0000003, answer 0.00103).
+- Not checked live: the restricted-course refusal (covered by unit tests only) and the claims in the answer against the source text.
