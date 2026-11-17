@@ -1,22 +1,20 @@
-// Deterministic, explainable priority ranking. No network, LLM or randomness in the ranking itself.
+// Deterministic deadline-based priorities. No network, LLM or randomness in the ranking itself.
 //
-// Order of an active (incomplete, still submittable, dated) assignment:
-//   1. Tier: overdue-but-open, then due within 24h, within 72h, later.
-//   2. Local calendar day of the due date (in the viewer's time zone), earliest first.
-//   3. Within a day: work due within IMMINENT_HOURS of now stays first, by due time.
-//      The rest is ordered by due time, then the slots held by items with an *estimated grade weight*
-//      are refilled in descending weight. Items without an estimate never move and are never treated as 0%.
-//   4. Ties: due time, course id, assignment id.
+// An assignment is *active* when it is incomplete, still submittable and has a due date:
+//   Overdue  due date has passed (own section, most recently overdue first; labeled High)
+//   High     due within 24 hours
+//   Medium   due within 72 hours
+//   Low      due later
+// Active upcoming work is sorted by earliest deadline. Everything else is separated, never guessed:
+// no due date -> Unscheduled; submitted/graded -> Completed; excused, closed, locked or not yet open -> Not actionable.
 
 export const HIGH_HOURS = 24;
 export const MEDIUM_HOURS = 72;
-/** Work due this soon is never displaced by a heavier assignment due later the same day. */
-export const IMMINENT_HOURS = 3;
 
 export type SubmissionStatus = "submitted" | "graded" | "incomplete" | "unverified" | "unknown" | "excused";
 export type PriorityLevel = "high" | "medium" | "low";
-export type Section = "active" | "unscheduled" | "not_actionable" | "completed";
-export type SortMode = "recommended" | "deadline";
+export type Section = "overdue" | "upcoming" | "unscheduled" | "not_actionable" | "completed";
+export type SortMode = "due" | "course";
 
 export type PriorityItem = {
   id: number;
@@ -37,7 +35,6 @@ export type PriorityItem = {
   submitted_at: string | null;
   missing: boolean;
   late: boolean;
-  grade_weight: { percent: number | null; reason: string | null };
 };
 
 export type PrioritiesPayload = {
@@ -53,16 +50,17 @@ export type RankedItem = PriorityItem & {
   level: PriorityLevel | null;
   overdue: boolean;
   dueMs: number | null;
-  /** Why this assignment is in its section / position. */
-  explanation: string;
-  /** Short status line about completion that Canvas does or does not confirm. */
+  /** Short deadline text ("Due in 8 hours", "Overdue by 2 days") or why it is not actionable. */
+  dueLabel: string;
+  /** Completion as Canvas reports it; unverifiable work is labeled, never marked done. */
   statusLabel: string;
 };
 
 export type Filters = { courseId: number | "all"; level: PriorityLevel | "all"; showCompleted: boolean };
 
 export type PriorityView = {
-  active: RankedItem[];
+  overdue: RankedItem[];
+  upcoming: RankedItem[];
   unscheduled: RankedItem[];
   notActionable: RankedItem[];
   completed: RankedItem[];
@@ -116,154 +114,93 @@ export function describeDue(dueMs: number, nowMs: number, zone: string): string 
 }
 
 // ------------------------------------------------------------------ classification
-type Classified = { item: PriorityItem; section: Section; dueMs: number | null; hours: number | null; note: string };
-
-function classify(item: PriorityItem, nowMs: number): Classified {
-  const dueMs = parseMs(item.due_at);
-  const base = { item, dueMs, hours: dueMs === null ? null : (dueMs - nowMs) / 3_600_000 };
-  if (item.submission_status === "submitted") return { ...base, section: "completed", note: "Submitted" };
-  if (item.submission_status === "graded") return { ...base, section: "completed", note: "Graded" };
-  if (item.submission_status === "excused") return { ...base, section: "not_actionable", note: "Excused" };
-  const unlockMs = parseMs(item.unlock_at) ?? parseMs(item.lock_unlock_at);
-  if (unlockMs !== null && unlockMs > nowMs) return { ...base, section: "not_actionable", note: "Not available yet" };
-  const lockMs = parseMs(item.lock_at);
-  if ((lockMs !== null && lockMs <= nowMs) || item.locked_for_user) {
-    return { ...base, section: "not_actionable", note: "Closed — Canvas is not accepting submissions" };
-  }
-  return { ...base, section: dueMs === null ? "unscheduled" : "active", note: "" };
-}
-
 const STATUS_LABELS: Record<SubmissionStatus, string> = {
   submitted: "Submitted",
   graded: "Graded",
   excused: "Excused",
   incomplete: "Not submitted",
-  unverified: "Not tracked online — submission unverified",
-  unknown: "Submission status unavailable",
+  unverified: "Not tracked online",
+  unknown: "Status unavailable",
 };
 
 function statusLabel(item: PriorityItem): string {
-  const label = STATUS_LABELS[item.submission_status] ?? STATUS_LABELS.unknown;
-  return item.missing && item.submission_status === "incomplete" ? "Marked missing in Canvas" : label;
+  if (item.missing && item.submission_status === "incomplete") return "Missing";
+  return STATUS_LABELS[item.submission_status] ?? STATUS_LABELS.unknown;
 }
 
-// ------------------------------------------------------------------ ordering of active items
-function stable(a: Classified, b: Classified): number {
-  return (a.dueMs ?? 0) - (b.dueMs ?? 0) || a.item.course_id - b.item.course_id || a.item.id - b.item.id;
+function classify(item: PriorityItem, nowMs: number): { section: Section; note: string } {
+  if (item.submission_status === "submitted" || item.submission_status === "graded") return { section: "completed", note: "" };
+  if (item.submission_status === "excused") return { section: "not_actionable", note: "" };
+  const unlockMs = parseMs(item.unlock_at) ?? parseMs(item.lock_unlock_at);
+  if (unlockMs !== null && unlockMs > nowMs) return { section: "not_actionable", note: "Not open yet" };
+  const lockMs = parseMs(item.lock_at);
+  if (lockMs !== null && lockMs <= nowMs) return { section: "not_actionable", note: "Closed" };
+  if (item.locked_for_user) return { section: "not_actionable", note: "Locked" };
+  const dueMs = parseMs(item.due_at);
+  if (dueMs === null) return { section: "unscheduled", note: "" };
+  return { section: dueMs <= nowMs ? "overdue" : "upcoming", note: "" };
 }
 
-const weightOf = (c: Classified) => c.item.grade_weight?.percent ?? null;
-
-function tierOf(c: Classified): number {
-  const hours = c.hours as number;
-  return hours <= 0 ? 0 : hours <= HIGH_HOURS ? 1 : hours <= MEDIUM_HOURS ? 2 : 3;
-}
-
-type Ordered = { entry: Classified; weightNote: string };
-
-function orderActive(entries: Classified[], nowMs: number, zone: string): Ordered[] {
-  const result: Ordered[] = [];
-  const overdue = entries.filter((e) => tierOf(e) === 0).sort((a, b) => (b.dueMs! - a.dueMs!) || stable(a, b));
-  overdue.forEach((entry) => result.push({ entry, weightNote: "" }));
-
-  for (const tier of [1, 2, 3]) {
-    const inTier = entries.filter((e) => tierOf(e) === tier);
-    const days = [...new Set(inTier.map((e) => localDayNumber(e.dueMs!, zone)))].sort((a, b) => a - b);
-    for (const day of days) {
-      const sameDay = inTier.filter((e) => localDayNumber(e.dueMs!, zone) === day).sort(stable);
-      const imminent = sameDay.filter((e) => e.hours! <= IMMINENT_HOURS);
-      const rest = sameDay.filter((e) => e.hours! > IMMINENT_HOURS);
-      const slots = rest.map((e, index) => (weightOf(e) === null ? -1 : index)).filter((index) => index >= 0);
-      const weighted = slots.map((index) => rest[index])
-        .sort((a, b) => (weightOf(b)! - weightOf(a)!) || stable(a, b));
-      const arranged = [...rest];
-      slots.forEach((slot, i) => { arranged[slot] = weighted[i]; });
-      imminent.forEach((entry) => result.push({ entry, weightNote: "" }));
-      arranged.forEach((entry, position) => {
-        const earlierDueBehind = arranged.slice(position + 1).some((o) => o.dueMs! < entry.dueMs!);
-        const laterDueAhead = arranged.slice(0, position).some((o) => o.dueMs! > entry.dueMs!);
-        const weightNote = earlierDueBehind
-          ? "Ranked above earlier work due the same day because of higher estimated grade weight."
-          : laterDueAhead ? "Ranked after heavier-weighted work due the same day." : "";
-        result.push({ entry, weightNote });
-      });
-    }
+function rank(item: PriorityItem, nowMs: number, zone: string): RankedItem {
+  const { section, note } = classify(item, nowMs);
+  const dueMs = parseMs(item.due_at);
+  let level: PriorityLevel | null = null;
+  let dueLabel = note;
+  if ((section === "overdue" || section === "upcoming") && dueMs !== null) {
+    const hours = (dueMs - nowMs) / 3_600_000;
+    level = hours <= HIGH_HOURS ? "high" : hours <= MEDIUM_HOURS ? "medium" : "low";
+    dueLabel = describeDue(dueMs, nowMs, zone);
   }
-  return result;
+  return { ...item, section, level, overdue: section === "overdue", dueMs, dueLabel, statusLabel: statusLabel(item) };
 }
 
 // ------------------------------------------------------------------ public API
-function toRanked(c: Classified, nowMs: number, zone: string, weightNote = ""): RankedItem {
-  const { item, section, dueMs, hours } = c;
-  let level: PriorityLevel | null = null;
-  let explanation = c.note;
-  const overdue = section === "active" && hours !== null && hours <= 0;
-  if (section === "active" && hours !== null && dueMs !== null) {
-    level = overdue || hours <= HIGH_HOURS ? "high" : hours <= MEDIUM_HOURS ? "medium" : "low";
-    const label = level === "high" ? "High" : level === "medium" ? "Medium" : "Low";
-    const timing = describeDue(dueMs, nowMs, zone);
-    explanation = `${label} priority — ${timing}${overdue ? "; Canvas still accepts submissions" : ""}.`;
-    if (weightNote) explanation += ` ${weightNote}`;
-    else if (typeof item.grade_weight?.percent !== "number") explanation += " Grade weight unavailable — ranked by deadline.";
-  } else if (section === "unscheduled") {
-    explanation = "No due date in Canvas — not ranked by urgency.";
-  } else if (section === "not_actionable") {
-    explanation = `${c.note}.`;
-  } else if (section === "completed") {
-    explanation = `${c.note} — no action needed.`;
-  }
-  return { ...item, section, level, overdue, dueMs, explanation, statusLabel: statusLabel(item) };
-}
+const FAR = Number.MAX_SAFE_INTEGER;
+const byIds = (a: RankedItem, b: RankedItem) => a.course_id - b.course_id || a.id - b.id;
+const byCourse = (a: RankedItem, b: RankedItem) =>
+  (a.course_code ?? "").localeCompare(b.course_code ?? "") || a.course_id - b.course_id;
+const byName = (a: RankedItem, b: RankedItem) => byCourse(a, b) || (a.name ?? "").localeCompare(b.name ?? "") || a.id - b.id;
+const dueAsc = (a: RankedItem, b: RankedItem) => (a.dueMs ?? FAR) - (b.dueMs ?? FAR) || byIds(a, b);
+/** Most recently overdue first, so very old overdue work does not push everything else down. */
+const dueDesc = (a: RankedItem, b: RankedItem) => (b.dueMs ?? 0) - (a.dueMs ?? 0) || byIds(a, b);
 
-const byName = (a: RankedItem, b: RankedItem) =>
-  (a.course_code ?? "").localeCompare(b.course_code ?? "") || (a.name ?? "").localeCompare(b.name ?? "") || a.id - b.id;
-
-/** Rank everything, then apply the viewer's filters and sort mode. `now` and `zone` are injectable for tests. */
+/** Classify, filter and sort. `now` and `timeZone` are injectable so behavior is testable. */
 export function buildPriorityView(
   items: PriorityItem[],
   nowMs: number,
   filters: Filters = { courseId: "all", level: "all", showCompleted: true },
-  sort: SortMode = "recommended",
+  sort: SortMode = "due",
   timeZone?: string,
 ): PriorityView {
   const zone = resolveTimeZone(timeZone);
   const scoped = filters.courseId === "all" ? items : items.filter((i) => i.course_id === filters.courseId);
-  const classified = scoped.map((item) => classify(item, nowMs));
-  const activeEntries = classified.filter((c) => c.section === "active");
-
-  let active: RankedItem[];
-  if (sort === "deadline") {
-    active = activeEntries.sort(stable).map((c) => toRanked(c, nowMs, zone));
-  } else {
-    active = orderActive(activeEntries, nowMs, zone).map(({ entry, weightNote }) => toRanked(entry, nowMs, zone, weightNote));
-  }
-  const others = (section: Section, compare: (a: RankedItem, b: RankedItem) => number) =>
-    classified.filter((c) => c.section === section).map((c) => toRanked(c, nowMs, zone)).sort(compare);
-  const byDue = (a: RankedItem, b: RankedItem) =>
-    (a.dueMs ?? Number.MAX_SAFE_INTEGER) - (b.dueMs ?? Number.MAX_SAFE_INTEGER) || byName(a, b);
-  const unscheduled = others("unscheduled", byName);
-  const notActionable = others("not_actionable", byDue);
-  const completed = others("completed", (a, b) => (b.dueMs ?? 0) - (a.dueMs ?? 0) || byName(a, b));
+  const ranked = scoped.map((item) => rank(item, nowMs, zone));
+  const pick = (section: Section, compare: (a: RankedItem, b: RankedItem) => number) => {
+    const list = ranked.filter((i) => i.section === section);
+    return sort === "course" ? list.sort((a, b) => byCourse(a, b) || compare(a, b)) : list.sort(compare);
+  };
+  const overdue = pick("overdue", dueDesc);
+  const upcoming = pick("upcoming", dueAsc);
+  const unscheduled = ranked.filter((i) => i.section === "unscheduled").sort(byName);
+  const notActionable = pick("not_actionable", dueAsc);
+  const completed = pick("completed", dueDesc);
 
   const counts = {
-    overdue: active.filter((i) => i.overdue).length,
-    within24h: active.filter((i) => !i.overdue && i.level === "high").length,
-    within72h: active.filter((i) => i.level === "medium").length,
+    overdue: overdue.length,
+    within24h: upcoming.filter((i) => i.level === "high").length,
+    within72h: upcoming.filter((i) => i.level === "medium").length,
     completed: completed.length,
   };
-  const levelOnly = filters.level !== "all";
+  const byLevel = filters.level !== "all";
+  const matches = (i: RankedItem) => i.level === filters.level;
   return {
-    active: levelOnly ? active.filter((i) => i.level === filters.level) : active,
-    unscheduled: levelOnly ? [] : unscheduled,
-    notActionable: levelOnly ? [] : notActionable,
-    completed: levelOnly || !filters.showCompleted ? [] : completed,
+    overdue: byLevel ? overdue.filter(matches) : overdue, // overdue work counts as High
+    upcoming: byLevel ? upcoming.filter(matches) : upcoming,
+    unscheduled: byLevel ? [] : unscheduled,
+    notActionable: byLevel ? [] : notActionable,
+    completed: byLevel || !filters.showCompleted ? [] : completed,
     counts,
   };
-}
-
-export function formatGradeWeight(weight: PriorityItem["grade_weight"] | undefined): string {
-  const percent = weight?.percent;
-  return typeof percent === "number" && Number.isFinite(percent) ? `~${percent}%` : "Unavailable";
 }
 
 // ------------------------------------------------------------------ data access

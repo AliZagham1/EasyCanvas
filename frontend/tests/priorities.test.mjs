@@ -21,43 +21,53 @@ const item = (over = {}) => ({
   id: ++seq, course_id: 1, course_code: "CSE 3311", course_name: "Software", name: `Task ${seq}`,
   html_url: `https://canvas.example/courses/1/assignments/${seq}`, due_at: at(48), lock_at: null, unlock_at: null,
   locked_for_user: false, points_possible: 10, submission_types: ["online_upload"], is_group: false,
-  submission_status: "incomplete", submitted_at: null, missing: false, late: false,
-  grade_weight: { percent: null, reason: "Course grading settings were not available." }, ...over,
+  submission_status: "incomplete", submitted_at: null, missing: false, late: false, ...over,
 });
-const w = (percent) => ({ percent, reason: null });
 const view = (items, filters, sort, zone = CHI, now = NOW) => P.buildPriorityView(items, now, filters, sort, zone);
-const names = (list) => Array.from(list, (i) => i.name); // main-realm array (results come from a vm context)
+// Results come from a vm context; copy into main-realm arrays so deepEqual compares by value.
+const names = (list) => Array.from(list, (i) => i.name);
 
-test("urgency tiers and exact boundaries", () => {
+test("High, Medium and Low use the exact 24h and 72h boundaries", () => {
   const items = [
     item({ name: "eight", due_at: at(8) }), item({ name: "h24", due_at: at(24) }), item({ name: "h24p", due_at: at(24 + 1 / 60) }),
     item({ name: "h72", due_at: at(72) }), item({ name: "h72p", due_at: at(72 + 1 / 60) }), item({ name: "week", due_at: at(170) }),
   ];
-  const levels = Object.fromEntries(view(items).active.map((i) => [i.name, i.level]));
+  const levels = Object.fromEntries(Array.from(view(items).upcoming, (i) => [i.name, i.level]));
   assert.deepEqual(levels, { eight: "high", h24: "high", h24p: "medium", h72: "medium", h72p: "low", week: "low" });
 });
 
-test("overdue incomplete open work is High, first, and explained", () => {
-  const result = view([item({ name: "soon", due_at: at(1) }), item({ name: "late", due_at: at(-30) }), item({ name: "slightly", due_at: at(-0.5) })]);
-  assert.deepEqual(names(result.active), ["slightly", "late", "soon"]);
-  assert.ok(result.active[0].overdue && result.active[0].level === "high");
-  assert.match(result.active[1].explanation, /^High priority — Overdue by 30 hours; Canvas still accepts submissions\./);
-  assert.equal(result.counts.overdue, 2);
+test("upcoming work is sorted by earliest deadline, regardless of input order", () => {
+  const items = [item({ name: "c", due_at: at(100) }), item({ name: "a", due_at: at(5) }), item({ name: "b", due_at: at(30) })];
+  assert.deepEqual(names(view(items).upcoming), ["a", "b", "c"]);
+  assert.deepEqual(names(view([...items].reverse()).upcoming), ["a", "b", "c"]);
 });
 
-test("summary counts are mutually exclusive, so no assignment is counted twice", () => {
+test("overdue open work has its own section, most recently overdue first, labeled High", () => {
+  const result = view([item({ name: "soon", due_at: at(1) }), item({ name: "old", due_at: at(-24 * 40) }), item({ name: "recent", due_at: at(-3) }), item({ name: "mid", due_at: at(-72) })]);
+  assert.deepEqual(names(result.overdue), ["recent", "mid", "old"]);
+  assert.deepEqual(names(result.upcoming), ["soon"]);
+  assert.ok(result.overdue.every((i) => i.overdue && i.level === "high"));
+  assert.equal(result.overdue[0].dueLabel, "Overdue by 3 hours");
+  assert.equal(result.overdue[2].dueLabel, "Overdue by 40 days");
+  assert.equal(result.overdue[0].section, "overdue");
+});
+
+test("a deadline of exactly now counts as overdue", () => {
+  assert.deepEqual(names(view([item({ name: "now", due_at: at(0) })]).overdue), ["now"]);
+});
+
+test("summary counts are mutually exclusive, so nothing is counted twice", () => {
   const items = [item({ due_at: at(-2) }), item({ due_at: at(5) }), item({ due_at: at(30) }), item({ due_at: at(60) }), item({ due_at: at(200) }),
     item({ submission_status: "submitted" }), item({ due_at: null })];
-  const { counts, active } = view(items);
+  const { counts } = view(items);
   assert.deepEqual({ ...counts }, { overdue: 1, within24h: 1, within72h: 2, completed: 1 });
-  assert.equal(counts.overdue + counts.within24h + counts.within72h, active.filter((i) => i.level !== "low").length);
 });
 
-test("explanations name the deadline and say when grade weight is unavailable", () => {
-  const [a] = view([item({ due_at: at(8) })]).active;
-  assert.equal(a.explanation, "High priority — Due in 8 hours. Grade weight unavailable — ranked by deadline.");
-  const [b] = view([item({ due_at: at(48), grade_weight: w(10) })]).active;
-  assert.equal(b.explanation, "Medium priority — Due in 2 days.");
+test("deadline text names the time left and has no grade language", () => {
+  const [a] = view([item({ due_at: at(8) })]).upcoming;
+  assert.equal(a.dueLabel, "Due in 8 hours");
+  assert.equal(view([item({ due_at: at(0.5) })]).upcoming[0].dueLabel, "Due in 30 minutes");
+  assert.equal(JSON.stringify(a).includes("grade_weight"), false);
 });
 
 test("submitted and graded work is completed, hidden on request, and counted", () => {
@@ -66,83 +76,27 @@ test("submitted and graded work is completed, hidden on request, and counted", (
   assert.deepEqual(names(shown.completed).sort(), ["done", "graded"]);
   assert.equal(shown.counts.completed, 2);
   assert.deepEqual(names(view(items, { courseId: "all", level: "all", showCompleted: false }).completed), []);
-  assert.deepEqual(names(shown.active), ["open"]);
-});
-
-test("same local day: higher verified weight outranks earlier-due work", () => {
-  const result = view([item({ name: "five", due_at: at(8), grade_weight: w(5) }), item({ name: "twentyfive", due_at: at(10), grade_weight: w(25) })]);
-  assert.deepEqual(names(result.active), ["twentyfive", "five"]);
-  assert.match(result.active[0].explanation, /Ranked above earlier work due the same day because of higher estimated grade weight/);
-  assert.match(result.active[1].explanation, /Ranked after heavier-weighted work due the same day/);
-  assert.equal(result.active[0].level, "high");
-});
-
-test("imminent deadlines are protected from heavier same-day work", () => {
-  const near = item({ name: "near", due_at: at(2), grade_weight: w(1) });
-  const heavy = item({ name: "heavy", due_at: at(9), grade_weight: w(40) });
-  assert.deepEqual(names(view([heavy, near]).active), ["near", "heavy"]);
-  // Exactly at the threshold is still protected; one minute later it is not.
-  assert.equal(P.IMMINENT_HOURS, 3);
-  assert.deepEqual(names(view([item({ name: "edge", due_at: at(3), grade_weight: w(1) }), heavy]).active), ["edge", "heavy"]);
-  assert.deepEqual(names(view([item({ name: "past", due_at: at(3 + 1 / 60), grade_weight: w(1) }), heavy]).active), ["heavy", "past"]);
-});
-
-test("unavailable weights keep deadline order and are never treated as zero", () => {
-  const items = [item({ name: "a", due_at: at(7), grade_weight: w(5) }), item({ name: "u", due_at: at(8) }), item({ name: "b", due_at: at(9), grade_weight: w(25) })];
-  assert.deepEqual(names(view(items).active), ["b", "u", "a"]); // unknown item never moves
-  const unknown = [item({ name: "x", due_at: at(9) }), item({ name: "y", due_at: at(8) })];
-  assert.deepEqual(names(view(unknown).active), ["y", "x"]);
-  const zero = [item({ name: "z", due_at: at(7), grade_weight: w(0) }), item({ name: "u2", due_at: at(8) })];
-  assert.deepEqual(names(view(zero).active), ["z", "u2"]);
-});
-
-test("grade weight never reorders across different days or urgency tiers", () => {
-  const nextDay = [item({ name: "today", due_at: at(8), grade_weight: w(1) }), item({ name: "tomorrow", due_at: at(20), grade_weight: w(60) })];
-  assert.deepEqual(names(view(nextDay).active), ["today", "tomorrow"]);
-  const oneHourVsThreeDays = [item({ name: "heavy3d", due_at: at(71), grade_weight: w(60) }), item({ name: "hour", due_at: at(1), grade_weight: w(1) })];
-  assert.deepEqual(names(view(oneHourVsThreeDays).active), ["hour", "heavy3d"]);
-});
-
-test("time zone decides what 'same day' means", () => {
-  // 04:30Z and 06:30Z on Nov 18. Chicago: Nov 17 22:30 and Nov 18 00:30 (different days). Tokyo: both Nov 18.
-  const items = () => [item({ name: "light", due_at: "2026-11-18T04:30:00Z", grade_weight: w(2) }), item({ name: "heavy", due_at: "2026-11-18T06:30:00Z", grade_weight: w(30) })];
-  assert.deepEqual(names(view(items(), undefined, undefined, CHI).active), ["light", "heavy"]);
-  assert.deepEqual(names(view(items(), undefined, undefined, "Asia/Tokyo").active), ["heavy", "light"]);
-});
-
-test("'tomorrow' follows the local calendar, not 24-hour blocks", () => {
-  const lateNow = Date.parse("2026-11-18T05:00:00Z"); // 23:00 Nov 17 in Chicago
-  const [a] = view([item({ due_at: "2026-11-18T07:00:00Z" })], undefined, undefined, CHI, lateNow).active; // 01:00 Nov 18, 2h away
-  assert.match(a.explanation, /Due in 2 hours/);
-  const [b] = view([item({ due_at: "2026-11-19T07:00:00Z" })], undefined, undefined, CHI, lateNow).active; // 01:00 Nov 19
-  assert.match(b.explanation, /Medium priority — Due in 2 days/);
-  const [c] = view([item({ due_at: "2026-11-19T05:30:00Z" })], undefined, undefined, CHI, lateNow).active; // 23:30 Nov 18, 24.5h away
-  assert.match(c.explanation, /Due tomorrow/);
-});
-
-test("invalid time zone falls back instead of throwing", () => {
-  assert.doesNotThrow(() => view([item({ due_at: at(5) })], undefined, undefined, "Not/AZone"));
+  assert.deepEqual(names(shown.upcoming), ["open"]);
 });
 
 test("missing due dates are unscheduled, never given urgency", () => {
   const result = view([item({ name: "nodue", due_at: null }), item({ name: "badstring", due_at: "garbage" })]);
-  assert.equal(result.active.length, 0);
+  assert.equal(result.upcoming.length + result.overdue.length, 0);
   assert.deepEqual(names(result.unscheduled), ["badstring", "nodue"]);
   assert.equal(result.unscheduled[0].level, null);
-  assert.deepEqual({ ...result.counts }, { overdue: 0, within24h: 0, within72h: 0, completed: 0 });
 });
 
-test("unknown and unverified submission status are labeled and never completed", () => {
+test("on-paper, unknown and missing statuses are labeled and never completed", () => {
   const result = view([
     item({ name: "paper", submission_status: "unverified", submission_types: ["on_paper"], due_at: at(10) }),
     item({ name: "mystery", submission_status: "unknown", due_at: at(11) }),
     item({ name: "missing", missing: true, due_at: at(12) }),
+    item({ name: "plain", due_at: at(13) }),
   ]);
   assert.equal(result.completed.length, 0);
-  const byName = Object.fromEntries(result.active.map((i) => [i.name, i.statusLabel]));
-  assert.match(byName.paper, /Not tracked online/);
-  assert.equal(byName.mystery, "Submission status unavailable");
-  assert.equal(byName.missing, "Marked missing in Canvas");
+  const labels = Object.fromEntries(Array.from(result.upcoming, (i) => [i.name, i.statusLabel]));
+  assert.deepEqual(labels, { paper: "Not tracked online", mystery: "Status unavailable", missing: "Missing", plain: "Not submitted" });
+  assert.equal(result.upcoming.length, 4); // still ranked by deadline, not dropped
 });
 
 test("closed, locked, excused and not-yet-open work is not actionable", () => {
@@ -153,46 +107,52 @@ test("closed, locked, excused and not-yet-open work is not actionable", () => {
     item({ name: "future", unlock_at: at(30), locked_for_user: true, due_at: at(60) }),
     item({ name: "open", due_at: at(5), lock_at: at(20) }),
   ]);
-  assert.deepEqual(names(result.active), ["open"]);
+  assert.deepEqual(names(result.upcoming), ["open"]);
+  assert.equal(result.overdue.length, 0); // a closed overdue assignment is not recommended as work
   assert.deepEqual(names(result.notActionable).sort(), ["closed", "excused", "future", "locked"]);
-  const closed = result.notActionable.find((i) => i.name === "closed");
-  assert.equal(closed.level, null);
-  assert.match(closed.explanation, /not accepting submissions/);
-  assert.match(result.notActionable.find((i) => i.name === "future").explanation, /Not available yet/);
+  const label = (n) => result.notActionable.find((i) => i.name === n).dueLabel;
+  assert.deepEqual([label("closed"), label("locked"), label("future"), label("excused")], ["Closed", "Locked", "Not open yet", ""]);
+  assert.equal(result.notActionable.find((i) => i.name === "excused").statusLabel, "Excused");
+  assert.ok(result.notActionable.every((i) => i.level === null));
 });
 
-test("course filter, priority filter and deadline sort", () => {
+test("time zone decides 'tomorrow' and local days", () => {
+  const lateNow = Date.parse("2026-11-18T05:00:00Z"); // 23:00 Nov 17 in Chicago
+  const label = (due, zone = CHI) => view([item({ due_at: due })], undefined, undefined, zone, lateNow).upcoming[0].dueLabel;
+  assert.equal(label("2026-11-18T07:00:00Z"), "Due in 2 hours");
+  assert.equal(label("2026-11-19T05:30:00Z"), "Due tomorrow"); // 23:30 Nov 18 local, 24.5h away
+  assert.equal(label("2026-11-19T07:00:00Z"), "Due in 2 days"); // 01:00 Nov 19 local
+  // Tokyo (UTC+9): both instants fall on Nov 19 local, the day after Nov 18 14:00 local "now".
+  assert.equal(label("2026-11-19T05:30:00Z", "Asia/Tokyo"), "Due tomorrow");
+  assert.equal(label("2026-11-19T07:00:00Z", "Asia/Tokyo"), "Due tomorrow"); // 16:00 Nov 19 in Tokyo
+  assert.doesNotThrow(() => view([item({ due_at: at(5) })], undefined, undefined, "Not/AZone"));
+});
+
+test("course filter, priority filter and course sort", () => {
   const items = [
     item({ name: "m-low", course_id: 2, course_code: "MATH 1", due_at: at(100) }),
-    item({ name: "c-high", course_id: 1, due_at: at(9), grade_weight: w(5) }),
-    item({ name: "c-high2", course_id: 1, due_at: at(7), grade_weight: w(25) }),
+    item({ name: "c-high", course_id: 1, due_at: at(9) }),
     item({ name: "m-high", course_id: 2, course_code: "MATH 1", due_at: at(20) }),
+    item({ name: "c-over", course_id: 1, due_at: at(-4) }),
+    item({ name: "c-done", course_id: 1, submission_status: "graded" }),
   ];
-  assert.deepEqual(names(view(items, { courseId: 1, level: "all", showCompleted: true }).active), ["c-high2", "c-high"]);
-  assert.deepEqual(names(view(items, { courseId: "all", level: "low", showCompleted: true }).active), ["m-low"]);
-  assert.deepEqual(names(view(items, undefined, "deadline").active), ["c-high2", "c-high", "m-high", "m-low"]);
-  const hidden = view([...items, item({ name: "x", due_at: null })], { courseId: "all", level: "high", showCompleted: true });
-  assert.equal(hidden.unscheduled.length, 0);
-});
-
-test("ranking is deterministic regardless of input order", () => {
-  const items = [1, 2, 3, 4, 5, 6].map((n) => item({ name: `n${n}`, due_at: at(5 + (n % 3)), grade_weight: n % 2 ? w(n) : undefined }));
-  const forward = names(view(items).active);
-  assert.deepEqual(names(view([...items].reverse()).active), forward);
+  const all = { courseId: "all", level: "all", showCompleted: true };
+  assert.deepEqual(names(view(items, { ...all, courseId: 1 }).upcoming), ["c-high"]);
+  assert.deepEqual(view(items, { ...all, courseId: 1 }).counts.overdue, 1);
+  assert.deepEqual(names(view(items, { ...all, courseId: 2 }).completed), []);
+  assert.deepEqual(names(view(items, { ...all, level: "low" }).upcoming), ["m-low"]);
+  const high = view(items, { ...all, level: "high" });
+  assert.deepEqual([names(high.overdue), names(high.upcoming)], [["c-over"], ["c-high", "m-high"]]); // overdue counts as High
+  assert.equal(high.completed.length + high.unscheduled.length + high.notActionable.length, 0);
+  assert.deepEqual(names(view(items, all, "course").upcoming), ["c-high", "m-high", "m-low"]);
+  assert.deepEqual(names(view(items, all, "due").upcoming), ["c-high", "m-high", "m-low"]);
 });
 
 test("Canvas link is preserved and a missing link stays missing", () => {
   const withLink = item({ html_url: "https://canvas.example/courses/9/assignments/77" });
-  const [a, b] = view([withLink, item({ html_url: null, due_at: at(60) })]).active;
+  const [a, b] = view([withLink, item({ html_url: null, due_at: at(60) })]).upcoming;
   assert.equal(a.html_url, "https://canvas.example/courses/9/assignments/77");
   assert.equal(b.html_url, null);
-});
-
-test("grade weight text never turns unavailable into zero", () => {
-  assert.equal(P.formatGradeWeight({ percent: null, reason: "x" }), "Unavailable");
-  assert.equal(P.formatGradeWeight(undefined), "Unavailable");
-  assert.equal(P.formatGradeWeight({ percent: 12.5, reason: null }), "~12.5%");
-  assert.equal(P.formatGradeWeight({ percent: 0, reason: null }), "~0%");
 });
 
 test("API client: refresh query, error status and malformed payloads", async () => {

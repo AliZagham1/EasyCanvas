@@ -9,6 +9,7 @@ import { useCourseSync } from "@/lib/use-course-sync";
 import PriorityCard from "../components/priority-card";
 
 const CLOCK_REFRESH_MS = 60_000;
+const OVERDUE_PREVIEW = 5;
 
 export default function PrioritiesPage() {
   const [data, setData] = useState<PrioritiesPayload | null>(null);
@@ -16,7 +17,8 @@ export default function PrioritiesPage() {
   const [hasError, setHasError] = useState(false);
   const [now, setNow] = useState(0);
   const [filters, setFilters] = useState<Filters>({ courseId: "all", level: "all", showCompleted: false });
-  const [sort, setSort] = useState<SortMode>("recommended");
+  const [sort, setSort] = useState<SortMode>("due");
+  const [showAllOverdue, setShowAllOverdue] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
   // A newer request always supersedes an older one, so a slow response cannot replace fresher data.
@@ -80,28 +82,25 @@ export default function PrioritiesPage() {
   const showData = data !== null && !unavailable;
   const view = useMemo(() => buildPriorityView(data?.assignments ?? [], now, filters, sort), [data, now, filters, sort]);
 
-  const sections: { key: string; title: string; note: string; items: RankedItem[] }[] = [
-    { key: "active", title: sort === "recommended" ? "Recommended order" : "Earliest deadline first",
-      note: sort === "recommended" ? "Most urgent first; heavier work first on the same day" : "Overdue work first", items: view.active },
-    { key: "unscheduled", title: "No due date", note: "Not ranked by urgency", items: view.unscheduled },
-    { key: "notActionable", title: "Not actionable", note: "Closed, locked, excused or not yet open", items: view.notActionable },
-    { key: "completed", title: "Completed", note: "Submitted or graded", items: view.completed },
+  const overdueShown = showAllOverdue ? view.overdue : view.overdue.slice(0, OVERDUE_PREVIEW);
+  const sections: { key: string; title: string; note: string; items: RankedItem[]; total: number }[] = [
+    { key: "overdue", title: "Overdue", note: "Most recently overdue first", items: overdueShown, total: view.overdue.length },
+    { key: "upcoming", title: "Upcoming", note: sort === "due" ? "Earliest deadline first" : "By course", items: view.upcoming, total: view.upcoming.length },
+    { key: "unscheduled", title: "No due date", note: "Not ranked by urgency", items: view.unscheduled, total: view.unscheduled.length },
+    { key: "notActionable", title: "Not actionable", note: "Closed, locked, excused or not open yet", items: view.notActionable, total: view.notActionable.length },
+    { key: "completed", title: "Completed", note: "Submitted or graded", items: view.completed, total: view.completed.length },
   ];
-  const visibleCount = sections.reduce((total, section) => total + section.items.length, 0);
+  const visibleCount = sections.reduce((sum, section) => sum + section.total, 0);
 
   let emptyMessage = "";
   if (showData && visibleCount === 0) {
-    const noWork = data.assignments.length === 0;
     if (courses.length === 0) emptyMessage = "No current courses found.";
-    else if (noWork) emptyMessage = partial ? "No assignments in loaded courses. Other courses are unavailable." : "No assignments found.";
+    else if (data.assignments.length === 0) emptyMessage = partial ? "No assignments in loaded courses. Other courses are unavailable." : "No assignments found.";
     else if (filters.courseId !== "all" || filters.level !== "all") emptyMessage = "No assignments match these filters.";
     else if (view.counts.completed > 0) emptyMessage = "Everything is complete. Nothing needs attention right now.";
     else emptyMessage = "No upcoming assignments.";
-  } else if (showData && view.active.length === 0 && view.unscheduled.length === 0 && view.counts.completed > 0 && filters.level === "all") {
-    emptyMessage = "Everything with a deadline is complete.";
   }
 
-  const stat = (value: number) => (loading && !data ? "..." : unavailable ? "Unavailable" : value);
   const stats = [
     { label: "Overdue", value: view.counts.overdue },
     { label: "Due within 24 hours", value: view.counts.within24h },
@@ -115,7 +114,7 @@ export default function PrioritiesPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Priorities</h1>
-          <p className="page-description">What to work on first, and why, across all your Canvas courses.</p>
+          <p className="page-description">What is due, when, and what to do first.</p>
         </div>
         <div className="header-actions">
           <button className="primary-button" onClick={() => void load(true)} disabled={loading}>Refresh</button>
@@ -130,7 +129,7 @@ export default function PrioritiesPage() {
           <div className="priority-stat" key={label}>
             <dt className="summary-label">{label}</dt>
             <dd className={`summary-value${unavailable ? " summary-state" : ""}`}>
-              {stat(value)}
+              {loading && !data ? "..." : unavailable ? "Unavailable" : value}
               {showData && partial && <span className="summary-qualifier"> (partial)</span>}
             </dd>
           </div>
@@ -139,7 +138,7 @@ export default function PrioritiesPage() {
 
       {partial && (
         <p className="coverage-notice" role="status">
-          Partial Canvas coverage: assignments could not be loaded for {failedNames}. Rankings and counts include loaded courses only. Use Refresh to try again.
+          Partial Canvas coverage: assignments could not be loaded for {failedNames}. Counts include loaded courses only. Use Refresh to try again.
         </p>
       )}
 
@@ -152,14 +151,14 @@ export default function PrioritiesPage() {
         </label>
         <label>Priority
           <select value={filters.level} onChange={(e) => setFilters({ ...filters, level: e.target.value as PriorityLevel | "all" })}>
-            <option value="all">All priorities</option>
+            <option value="all">All</option>
             <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
           </select>
         </label>
-        <label>Sort
+        <label>Sort by
           <select value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
-            <option value="recommended">Recommended priority</option>
-            <option value="deadline">Earliest deadline</option>
+            <option value="due">Due date</option>
+            <option value="course">Course</option>
           </select>
         </label>
         <label className="priority-check">
@@ -176,24 +175,26 @@ export default function PrioritiesPage() {
       )}
       {showData && emptyMessage && <p className="list-message" role="status">{emptyMessage}</p>}
 
-      {showData && sections.filter((section) => section.items.length > 0).map((section) => (
+      {showData && sections.filter((section) => section.total > 0).map((section) => (
         <section key={section.key} className="coursework-panel" aria-labelledby={`priority-${section.key}`} aria-busy={loading}>
           <div className="panel-header">
-            <h2 id={`priority-${section.key}`} className="section-title">{section.title}</h2>
+            <h2 id={`priority-${section.key}`} className="section-title">
+              {section.title} <span className="priority-count">{section.total}</span>
+            </h2>
             <span className="panel-note">{section.note}</span>
           </div>
           <ul className="priority-list">
             {section.items.map((item) => <PriorityCard key={`${item.course_id}-${item.id}`} item={item} />)}
           </ul>
+          {section.key === "overdue" && section.total > OVERDUE_PREVIEW && (
+            <button className="priority-more" onClick={() => setShowAllOverdue(!showAllOverdue)} aria-expanded={showAllOverdue}>
+              {showAllOverdue ? "Show fewer" : `Show all ${section.total} overdue`}
+            </button>
+          )}
         </section>
       ))}
 
-      {showData && updated && (
-        <p className="priority-footnote">
-          Updated {updated}{data.cached ? " (recent cached data)" : ""}. Deadlines are shown in your local time zone. Each assignment is counted once in the tiles above. Estimated grade weight appears only when
-          Canvas category weights and points support it.
-        </p>
-      )}
+      {showData && updated && <p className="priority-footnote">Updated {updated}. Times are shown in your local time zone.</p>}
     </div>
   );
 }

@@ -1,8 +1,7 @@
 """Canvas facts for the Priorities page. Ranking itself lives in frontend/lib/priorities.ts.
 
-This module only normalizes read-only Canvas data (assignments, submissions, assignment groups,
-course grading settings) and computes an *estimated grade weight* when Canvas data supports it.
-It never writes to Canvas, uses no LLM, and never turns unknown data into zero.
+This module only normalizes read-only Canvas assignment and submission data. It never writes to
+Canvas, uses no LLM, and does not compute grades.
 """
 
 import threading
@@ -16,7 +15,6 @@ CACHE_TTL_SECONDS = 60
 MAX_PARALLEL_COURSES = 4
 # Canvas does not reliably record completion for these, so "unsubmitted" is not evidence of anything.
 UNTRACKED_SUBMISSION_TYPES = {"", "none", "on_paper", "not_graded", "external_tool"}
-WEIGHT_SUM_TOLERANCE = 0.01
 
 
 # ---------------------------------------------------------------- normalization
@@ -56,56 +54,7 @@ def submission_status(raw):
     return "unknown"
 
 
-def _counts_toward_grade(raw):
-    """Published, graded, points-bearing assignments that Canvas includes in the final grade."""
-    return (raw.get("published") is not False and not raw.get("omit_from_final_grade")
-            and raw.get("grading_type") != "not_graded" and _number(raw.get("points_possible")) is not None
-            and submission_status(raw) != "excused")
-
-
-def estimate_grade_weight(raw, raw_assignments, groups, settings):
-    """Estimated share of the final grade, or percent=None with the reason it is unavailable."""
-    def unavailable(reason):
-        return {"percent": None, "reason": reason}
-
-    if not isinstance(settings, dict) or groups is None:
-        return unavailable("Course grading settings were not available.")
-    if settings.get("hide_final_grades"):
-        return unavailable("This course hides final grades.")
-    if not _counts_toward_grade(raw):
-        return unavailable("This assignment does not count toward the final grade.")
-    points = raw["points_possible"]
-    if points <= 0:
-        return unavailable("Zero-point work may be extra credit.")
-    if any(group.get("rules") for group in groups):
-        return unavailable("Dropped-score rules make the weight unreliable.")
-    weighted = settings.get("apply_assignment_group_weights") is True
-    counted = [item for item in raw_assignments if _counts_toward_grade(item)]
-    if weighted:
-        by_id = {group.get("id"): group for group in groups}
-        weights = [_number(group.get("group_weight")) for group in groups]
-        if any(weight is None for weight in weights) or abs(sum(weights) - 100) > WEIGHT_SUM_TOLERANCE:
-            return unavailable("Category weights do not add up to 100%.")
-        group = by_id.get(raw.get("assignment_group_id"))
-        if group is None:
-            return unavailable("The assignment's category was not found.")
-        for candidate in groups:
-            members = [item for item in counted if item.get("assignment_group_id") == candidate.get("id")]
-            if candidate["group_weight"] > 0 and not any(item["points_possible"] > 0 for item in members):
-                return unavailable("A weighted category has no graded work, so Canvas may reassign its weight.")
-        scope = [item for item in counted if item.get("assignment_group_id") == group.get("id")]
-        weight = group["group_weight"]
-    else:
-        scope, weight = counted, 100
-    if any(item["points_possible"] <= 0 for item in scope):
-        return unavailable("Zero-point work in this scope may be extra credit.")
-    total = sum(item["points_possible"] for item in scope)
-    if total <= 0:
-        return unavailable("Category points are unavailable.")
-    return {"percent": round(weight * points / total, 1), "reason": None}
-
-
-def normalize_assignment(course, raw, raw_assignments, groups, settings):
+def normalize_assignment(course, raw):
     submission = raw.get("submission") if isinstance(raw.get("submission"), dict) else {}
     lock_info = raw.get("lock_info") if isinstance(raw.get("lock_info"), dict) else {}
     return {
@@ -127,32 +76,18 @@ def normalize_assignment(course, raw, raw_assignments, groups, settings):
         "submitted_at": submission.get("submitted_at"),
         "missing": submission.get("missing") is True,
         "late": submission.get("late") is True,
-        "grade_weight": estimate_grade_weight(raw, raw_assignments, groups, settings),
     }
 
 
-def build_course_items(course, raw_assignments, groups, settings):
-    return [normalize_assignment(course, raw, raw_assignments, groups, settings)
+def build_course_items(course, raw_assignments):
+    return [normalize_assignment(course, raw)
             for raw in raw_assignments if raw.get("published") is not False and raw.get("id") is not None]
 
 
 # ---------------------------------------------------------------- Canvas access (read-only)
 def _fetch_assignments(course_id):
     url = f"{canvas_service.CANVAS_URL}/api/v1/courses/{course_id}/assignments"
-    return canvas_service._get_paginated(url, {"include[]": ["submission", "all_dates"]})
-
-
-def _fetch_groups(course_id):
-    return canvas_service._get_paginated(f"{canvas_service.CANVAS_URL}/api/v1/courses/{course_id}/assignment_groups")
-
-
-def _fetch_settings(course_id):
-    response = canvas_service._request_get(f"{canvas_service.CANVAS_URL}/api/v1/courses/{course_id}",
-                                           headers=canvas_service.headers)
-    try:
-        return response.json()
-    finally:
-        response.close()
+    return canvas_service._get_paginated(url, {"include[]": "submission"})
 
 
 def _load_courses():
@@ -160,13 +95,7 @@ def _load_courses():
 
 
 def _fetch_course(course):
-    """Assignments are required; missing grading data only makes the weight unavailable."""
-    assignments = _fetch_assignments(course["id"])
-    try:
-        groups, settings = _fetch_groups(course["id"]), _fetch_settings(course["id"])
-    except Exception:  # noqa: BLE001 - grading data is optional; assignments must still be shown.
-        groups, settings = None, None
-    return build_course_items(course, assignments, groups, settings)
+    return build_course_items(course, _fetch_assignments(course["id"]))
 
 
 # ---------------------------------------------------------------- cache
