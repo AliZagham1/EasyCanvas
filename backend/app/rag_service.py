@@ -185,6 +185,20 @@ class RAGValidationError(ValueError):
     """Reject malformed or invalidly cited output rather than display it."""
 
 
+_PRIVATE_USE = "\ue000-\uf8ff"
+# Some models emit their own hidden citation markup, e.g. "\ue200cite\ue202S1\ue201", which shows as a stray "citeS1".
+_MODEL_CITATION_MARKUP = re.compile(rf"[ \t]?[{_PRIVATE_USE}]cite[^\ue201\n]*\ue201", re.I)   # may list several ids, separated by private-use marks
+_UNCLOSED_MARKUP = re.compile(rf"[{_PRIVATE_USE}]cite", re.I)
+_PRIVATE_USE_CHARS = re.compile(rf"[{_PRIVATE_USE}]")
+
+
+def clean_model_text(text):
+    """Remove hidden citation markup and private-use characters from model text. Backend citations are the only ones shown."""
+    if not isinstance(text, str):
+        return text
+    return _PRIVATE_USE_CHARS.sub("", _UNCLOSED_MARKUP.sub("", _MODEL_CITATION_MARKUP.sub("", text)))
+
+
 def _validate_answer(answer, source_ids):
     """Check shape and citation membership; this is not semantic fact checking."""
     if not isinstance(answer, dict) or set(answer) != {"status", "blocks", "limitations"}:
@@ -195,6 +209,10 @@ def _validate_answer(answer, source_ids):
         raise RAGValidationError("Answer blocks/limitations must be lists.")
     if any(not isinstance(value, str) or not value.strip() for value in answer["limitations"]):
         raise RAGValidationError("Answer limitations must be nonempty strings.")
+    for block in answer["blocks"]:
+        if isinstance(block, dict) and isinstance(block.get("text"), str):
+            block["text"] = clean_model_text(block["text"])
+    answer["limitations"] = [clean_model_text(value) for value in answer["limitations"]]
     texts = answer['limitations'] + [b.get('text') for b in answer['blocks'] if isinstance(b, dict)]
     if any(policy_service.invalid_controls(text) for text in texts):
         raise RAGValidationError('Answer contains invalid control characters.')
@@ -239,6 +257,10 @@ def _validate_answer(answer, source_ids):
                 raise RAGValidationError("Answer contains unknown or undeclared inline citations.")
             return ""
         block["text"] = re.sub(r"\[\s*S\d+\b[^\]]*\]", remove_inline, block["text"]).strip()
+        def remove_parenthesized(match):                      # "(S3)" / "(S1, S2)" duplicates the backend's [S3]; keep anything else
+            ids = set(re.findall(r"S\d+", match.group()))
+            return "" if ids and ids.issubset(set(citations)) else match.group()
+        block["text"] = re.sub(r"(?:^|[ \t])\(\s*S\d+(?:\s*[,;]\s*S\d+)*\s*\)", remove_parenthesized, block["text"], flags=re.M).strip()
         if not block["text"] or re.search(r"https?://", block["text"]):
             raise RAGValidationError("Answer text is empty or contains generated source URLs.")
 
@@ -248,6 +270,8 @@ def _prepare_context(course_id, retrieval, limit=5, question=None):
     warnings = []
     if retrieval.get("material_notice"):
         warnings.append(retrieval["material_notice"])
+    if retrieval.get("degraded_notice"):
+        warnings.append(retrieval["degraded_notice"])
     if retrieval["status"] == "partial":
         warnings.append("The course index is incomplete; answers use only indexed material.")
     coverage = retrieval.get("evidence_coverage")
@@ -258,7 +282,7 @@ def _prepare_context(course_id, retrieval, limit=5, question=None):
               "warnings": warnings, "retrieval_status": retrieval["status"],
               "model": None, "usage": None,
               "resolved_documents": retrieval.get("resolved_documents", [])}
-    for key in ("query_understanding", "retrieval_route", "resolved_assignments", "clarification_candidates", "excluded_assignment_ids", "assignment_policy", "material_notice"):
+    for key in ("query_understanding", "retrieval_route", "resolved_assignments", "clarification_candidates", "excluded_assignment_ids", "assignment_policy", "material_notice", "degraded_notice"):
         if key in retrieval:
             report[key] = retrieval[key]
     if coverage:
@@ -290,7 +314,7 @@ def _prepare_context(course_id, retrieval, limit=5, question=None):
     # Passage limitations are evidence context for the answer model. The sync
     # notice is a backend/UI message about saved material, not a property of the
     # evidence; sending it lets the model echo a near-duplicate warning (EC-012).
-    scope_warnings = [warning for warning in warnings if warning != retrieval.get("material_notice")]
+    scope_warnings = [warning for warning in warnings if warning not in (retrieval.get("material_notice"), retrieval.get("degraded_notice"))]
     sources, context, groups = {}, [], {}
     for item in retrieval["results"][:limit]:
         origins = [origin for origin in item["sources"]
@@ -337,6 +361,8 @@ def _finish_answer(report, response, sources, question=None):
         used_ids = {sid for block in answer['blocks'] for sid in block['source_ids']}
         # Keep index/coverage limits, then calculate extraction warnings from cited sources.
         scoped = [report['material_notice']] if report.get('material_notice') else []
+        if report.get('degraded_notice'):
+            scoped.append(report['degraded_notice'])         # tell the student the understanding step was skipped
         if (report.get('assignment_policy') or {}).get('conflicts'):
             # Syllabus and assignment disagree on AI use: say so on every answer (EC-015).
             scoped.append(policy_service.CONFLICT_NOTICE)
@@ -443,6 +469,12 @@ def _general_answer(course_id, retrieval, response):
     answer = response['answer']
     if not isinstance(answer, dict) or set(answer) != {'status', 'blocks', 'limitations'}:
         raise RAGValidationError('Invalid general answer shape.')
+    if isinstance(answer.get('blocks'), list):
+        for block in answer['blocks']:
+            if isinstance(block, dict) and isinstance(block.get('text'), str):
+                block['text'] = clean_model_text(block['text'])
+    if isinstance(answer.get('limitations'), list):
+        answer['limitations'] = [clean_model_text(value) for value in answer['limitations']]
     if answer['status'] not in ('answered', 'insufficient_context'):
         raise RAGValidationError('Invalid general answer status.')
     if answer['status'] != 'answered':
@@ -480,6 +512,8 @@ def answer_question(course_id, question, *, store=None, embedding_provider=None,
     understanding = asyncio.run(query_understanding_service.understand_question(
         course_id, question, store=store, provider=provider))
     retrieval = retrieval_router.route_query(course_id, question, understanding, store=store, provider=embedding_provider)
+    if isinstance(understanding, query_understanding_service.DegradedPlan):
+        retrieval = {**retrieval, 'degraded_notice': query_understanding_service.FALLBACK_NOTICE}
     if retrieval.get('retrieval_route') == 'general_concept':
         try:
             return _general_answer(course_id, retrieval, provider.generate_general(GENERAL_INSTRUCTIONS, question))
@@ -516,6 +550,8 @@ async def stream_answer_question(course_id, question, *, store, conversation_con
         course_id, question, store=store, provider=provider, conversation_context=conversation_context)
     retrieval = await asyncio.to_thread(retrieval_router.route_query, course_id, question, understanding,
                                        store=store, provider=embedding_provider, conversation_context=conversation_context)
+    if isinstance(understanding, query_understanding_service.DegradedPlan):
+        retrieval = {**retrieval, 'degraded_notice': query_understanding_service.FALLBACK_NOTICE}
     if retrieval.get('retrieval_route') == 'general_concept':
         yield {'event': 'generating', 'data': {}}
         completed = False

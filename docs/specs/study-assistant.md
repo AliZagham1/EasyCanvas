@@ -113,6 +113,40 @@ This reads existing course-scoped metadata; it does not redownload documents,
 change extraction, or rebuild chunks/embeddings. Courses without saved module
 relationships still depend on existing links/name matching or clarification.
 
+## Understanding failures and the fallback (EC-022)
+
+Every question first makes one model call to understand it. That call is retried on transient trouble only (rate limit, timeout,
+connection error, HTTP 408/409/429/5xx) with backoff (1 s, then 2.5 s, plus jitter), honoring `Retry-After` up to 8 s, for at most
+three attempts at 25 s each. Bad keys, exhausted quota and bad requests are never retried. Each retry, failure and recovery is saved
+as an event (`assistant_events`: stage, outcome, error class, HTTP status, attempt; never question text, answers or keys) and
+summarized by `GET /api/assistant/diagnostics?hours=24`.
+
+If understanding still fails, or the model's plan is rejected, a **safe subset** of questions falls back to a plain course-material
+search (`course_wide_question`) and the answer carries the notice "Question understanding was unavailable, so I searched your
+course material directly. Live Canvas details such as deadlines were not checked." The fallback is **refused** (the student sees the
+usual retry message) for: live Canvas facts (due dates, deadlines, submissions, points, "my grade"), specific numbered work
+(homework 1, lab 3, quiz 2, chapter 5, ... so one can never become ten), solution requests, follow-ups ("and the written one?",
+"that", "again"), and questions under four words. AI-use restrictions are decided from the question text itself, so they apply on
+the fallback path unchanged.
+
+## Date phrases
+
+Deadline questions are resolved by `structured_canvas_service.date_window` in the **course's time zone** (not UTC), as a half-open
+window, with no model involved. Supported: today, tonight (the rest of today), tomorrow, the day after tomorrow, yesterday, weekdays
+(`friday` is the next one, today if it is that day; `next friday` is that weekday of the following calendar week), this/next/last
+week, rest/end of the week, this/next weekend, this/next month, `in 3 days` / `in two weeks`, dates (`2026-11-20`, `11/20`,
+`Nov 20th`, `20 November`, `the 20th`), and `by` / `before` / `until` / `through` / `no later than` any of those (**by Friday** means
+everything from today through the end of Friday; **before Friday** stops at the start of Friday). Undated months and days mean the
+nearest sensible year or month. `11/20` is read month/day. The qualifier the model drops ("by Friday" returned as "Friday") is restored from the student's own words. "What is due?" with no date means the next 14 days (`upcoming`, `soon`, `coming up`); a request for all or every assignment still lists everything. A deadline or list question that asks about several courses is told the assistant answers one course at a time. A request the model labels a plain assignment list but that names a date ("what is due tonight?") is answered as a deadline lookup for that window, with each item's submission status (EC-023). Anything unclear (including `by banana`, impossible dates, `in 0 days`,
+text over 80 characters) is refused with a message listing what is supported, never guessed.
+
+## Course logistics come from the syllabus
+
+Questions about office hours, the instructor's name/email/contact, the grading scale or breakdown, class meeting time/location, or the syllabus
+itself are answered from the syllabus only, the same way policy questions are, so announcements ("office hours canceled") cannot outrank the
+actual hours. Regular hours therefore come from the syllabus, and a cancellation announcement is not mentioned unless asked about. Model-emitted
+hidden citation markup and duplicate "(S3)" labels are removed from every answer; the backend's own `[S3]` labels are the only citations shown.
+
 ## Citations and conversation
 
 Structured rubric/fact evidence uses `source_kind: structured_canvas` and the

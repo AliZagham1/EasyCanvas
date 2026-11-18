@@ -7,7 +7,7 @@ import sqlite3
 from typing import Literal
 import requests
 
-from fastapi import FastAPI, HTTPException, Path, Request, Response
+from fastapi import FastAPI, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, Field, StrictInt, field_validator
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +22,7 @@ from backend.app import visual_document_service
 from backend.app import openai_key_service
 from backend.app import schedule_service
 from backend.app import course_overview_service
+from backend.app import assistant_events
 from starlette.concurrency import run_in_threadpool
 from backend.app import rag_service
 from backend.app import retention_service
@@ -297,6 +298,15 @@ def course_catalog():
 def course_details(course_id: int = Path(gt=0)):
     """Saved announcements, modules, counts and Canvas links for one course page."""
     return _schedule_call(lambda store: course_overview_service.build_details(store, course_id))
+
+
+@app.get('/api/assistant/diagnostics')
+def assistant_diagnostics(hours: int = Query(default=24, ge=1, le=720)):
+    """Retries, failures and fallbacks of the assistant's model calls (error classes only; never questions or answers)."""
+    try:
+        return assistant_events.summarize(default_store(), hours=hours)
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='Assistant diagnostics are unavailable. Please retry.') from None
 
 
 @app.get('/api/openai-key')

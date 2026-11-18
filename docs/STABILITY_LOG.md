@@ -411,3 +411,96 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
 - Files: `backend/app/ingestion_store.py`, `backend/app/document_quality_service.py`, `backend/tests/test_stale_answer_notice.py`, `docs/specs/ingestion-pipeline.md`.
 - Not changed: retrieval still serves the previous version until the replacement is indexed (intended: it keeps material searchable).
 
+## EC-022 — A failed question-understanding call failed the whole question; common date phrases were rejected
+
+- Date: 2026-11-18
+- Status: **Fixed offline.** 47 new unit tests, the 231-check offline evaluation, the frontend is unchanged; no paid calls were made.
+- Evidence (usage ledger, read-only): 25 of 127 question-understanding calls ended without a usable response, all on 2026-11-17
+  (0 of the 21 before that day, about 24% that day). The ledger recorded only that a call failed, not why, and the failure reason
+  was only printed to the console, so the cause is **unconfirmed**. The failures overlapped a burst of about 390 vision calls during
+  syncs on the same API key, so rate limiting or timeouts are the leading suspicion.
+- Root cause: the understanding call had one library-level retry and no other recovery, and any failure raised "Unable to understand
+  the question". Separately, `date_window` accepted only today, tomorrow, a weekday, this/next week and YYYY-MM-DD, so "by Friday",
+  "tonight", "next Friday", "this weekend", "in 3 days" and "the 20th" were all rejected (tested).
+- Fix:
+  - `llm_service`: bounded retries with backoff for transient errors only (`is_transient`), `Retry-After` honored and capped, library
+    retry disabled so retries are not multiplied, 25 s per attempt.
+  - `assistant_events` module and table (rolling 1,000 rows, error classes only) + `GET /api/assistant/diagnostics`.
+  - `query_understanding_service.fallback_understanding`: a plain course search for a safe subset only (see the Study Assistant spec),
+    with a notice carried to the final answer (`degraded_notice`, kept out of the passage limitations sent to the model).
+  - `structured_canvas_service.date_window`: the broader deterministic parser in the Study Assistant spec; the rejection message now
+    lists what is supported.
+- Files: `backend/app/llm_service.py`, `assistant_events.py`, `ingestion_store.py`, `query_understanding_service.py`, `rag_service.py`,
+  `structured_canvas_service.py`, `retrieval_router.py`, `main.py`; tests `test_date_phrases.py` (18), `test_assistant_resilience.py` (29).
+- Verified on real data (read-only): "thursday" and "by friday" found Homework 7 (Nov 19 23:59 CST), "by friday" correctly excluded Lab 3
+  (Saturday), "this weekend", "in 4 days" and "Nov 21" found Lab 3, "before thursday" and "tonight" found nothing, "by banana" asked
+  the student to rephrase.
+- Not changed: the answer-generation call (streaming and non-streaming) is not retried; the fallback never handles live facts, numbered
+  work, solution requests or follow-ups; the original cause of the 2026-11-17 failures is still unknown (diagnostics now record it).
+- Remaining risk: worst-case understanding latency is now about 80 s (3 x 25 s plus backoff) when the provider is slow rather than
+  failing fast; a model that keeps phrasing dates in a way the parser rejects still triggers a clarification; "next Friday" and `11/20`
+  have one fixed reading (documented).
+
+## EC-023 — "What is due tonight?" listed every assignment's title instead of what is due tonight
+
+- Date: 2026-11-18
+- Status: **Fixed offline and replayed against the real stored plan (read-only).** 11 new tests; 888 backend tests and the 231-check
+  offline evaluation pass; no paid calls.
+- Symptom (reported live, CSE 3302): "what is due tonight?" returned 19 lines, "Assignment: Homework 1." through "In-class Assignment 7.",
+  each cited, with no due dates.
+- Root cause (confirmed from the saved conversation record): the model understood the date (`deadline_reference: "tonight"`,
+  `requires_live_canvas: true`, `requested_data: ["assignment_list", "deadline"]`) but labeled the intent `list_assignments`. That
+  intent is routed first and answered directly from `_assignment_list`, which ignores `deadline_reference` and prints titles only, so
+  the date-window logic that handles `get_deadline` never ran.
+- Fix (`retrieval_router.py`):
+  - A `list_assignments` plan that names a date is converted to `get_deadline` (deadline plus submission status), so the answer is the
+    deadlines inside that window, whatever label the model chose. An unrecognized date now asks the student to rephrase instead of
+    listing everything.
+  - A homework-only request stays homework-only inside a date window.
+  - A plain list whose question mentions due/deadline/when shows each deadline instead of just the title; a list without those words
+    is unchanged.
+  - The deadline answer includes submission status when the plan asks for it, so already-submitted work is visible.
+- Verified on real data: the stored plan replayed at the time of the question returned "No Canvas assignments have a deadline in that
+  window." (nothing due Wednesday night); replayed at Thursday 9 PM and 11:58 PM it returned Homework 7 (23:59 CST) with its status.
+- Not changed: a question with no date at all ("what is due?") is still a list. The model chose the wrong intent here, and a backend
+  guard now covers date-bearing requests; other mislabeled intents are not guarded.
+- Remaining risk: if the model leaves `deadline_reference` empty for a date-bound question, the old list behavior still applies. The
+  empty-window message ("in that window") does not repeat which window was asked.
+
+## EC-024 — Problems found by running 17 real demo questions through the live assistant
+
+- Date: 2026-11-18
+- Status: **Five fixed and re-verified live; three found and reported, not fixed.** 21 new tests (910 backend tests and the 231-check offline
+  evaluation pass). Live spend for the whole exercise: about USD 0.011 on a copy of the database (hard cap USD 0.10), so it does not appear
+  in Settings. Real Canvas reads were read-only.
+- Fixed (each reproduced live, then re-run live after the fix):
+  1. **Stray "citeS1" in an answer.** The model emitted its own hidden citation markup (`U+E200 cite U+E202 S1 U+E201`, invisible private-use
+     characters). `rag_service.clean_model_text` now removes the markup (including several ids) and any private-use characters from answers,
+     general-knowledge blocks and limitations. A duplicate "(S3)" next to the backend's own "[S3]" is also removed, but only when it stands
+     alone after a space and names a declared citation (`foo(S1)` in code is kept).
+  2. **"What's due by Friday?" found nothing.** The model rewrote "by Friday" as "Friday", so only Friday itself was searched and Thursday's
+     Homework 7 was missed. `structured_canvas_service.restore_date_qualifier` puts by/before/until/through/no later than back from the
+     student's own words.
+  3. **"Whats due?" listed everything since September.** A list request that mentions "due" with no date now means the next 14 days
+     (`upcoming`, also `soon`, `coming up`), with a message naming the window when empty. "All", "every", "each", "list" and filtered
+     follow-ups still list everything.
+  4. **"What is due this week in all my courses?" said "Please select the course named in your question".** Deadline and list questions that ask
+     about several courses now explain that the assistant answers one course at a time, instead of either that misleading message or silently
+     answering only the selected course. The check is limited to deadline/list intents so subject questions cannot trigger it.
+  5. **"What are the instructor's office hours?" said the material was insufficient.** The real hours ranked 7th, behind four announcements about
+     canceled office hours, and the answer step only sees the top 5. Course-logistics questions (office hours, instructor name/email/contact,
+     who is the instructor, grading scale/breakdown, class meeting time/location, "syllabus") now search the syllabus only, like policy
+     questions. The phrases are deliberately specific so ordinary subject questions that share a word stay on course material.
+- Found, not fixed:
+  - **Garbled text in the source files.** In 12 saved documents a lowercase "c" appears as a comma inside words ("instru,tor", "Fun,tional",
+    "A,,essibility"; 373 words in the CSE 3302 syllabus alone). It is in the file's native text layer, not introduced by our reader: where a page
+    was re-read by the vision model it came out clean. It lowers retrieval quality and can reach the student if the model quotes it. A fix needs a
+    design decision (repair against the course vocabulary, or prefer vision for pages with this pattern) and a re-index.
+  - **Retrieval is embeddings only.** Even for ordinary questions a short, labeled fact can rank behind semantically similar but less useful
+    passages (rank 7 of 20 here). A keyword boost or reranking would help; the logistics routing above covers only one family of questions.
+  - **Quiz and rubric dead ends.** "What is on Quiz 4?" gives a generic "no usable material" (the quiz is closed until Dec 1 and has no saved
+    content) and "How is Lab 3 graded?" stops at "no saved rubric" without pointing to the syllabus grading breakdown.
+- Worked as intended: AI-use questions and the "solve Lab 3 for me" refusal cited the syllabus rule; a prompt-injection request revealed nothing and
+  was not obeyed; a study-plan request said it is not implemented; follow-ups ("and when is it due?") kept their context; general concept answers
+  were labeled; document summaries carried honest "selected sections" and "could not be read reliably" warnings.
+

@@ -1,12 +1,45 @@
 """OpenAI answer-generation boundary; no retrieval, database, or UI logic."""
 
+import asyncio
 import json
 import os
+import random
 import time
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+
+
+# Question understanding is a short call: fail fast, then retry transient errors (rate limits, timeouts, 5xx) with backoff.
+UNDERSTANDING_TIMEOUT = 25
+RETRY_DELAYS = (1.0, 2.5)
+MAX_RETRY_AFTER = 8.0
+_sleep = asyncio.sleep
+
+
+def _jitter():
+    return random.uniform(0, 0.4)
+
+
+def is_transient(error):
+    """Worth retrying: network trouble, timeouts, rate limits and server errors. Never bad keys, quota or bad requests."""
+    from openai import APIConnectionError, APIStatusError
+    if isinstance(error, APIConnectionError):          # includes timeouts
+        return True
+    if isinstance(error, APIStatusError):
+        if getattr(error, "code", None) == "insufficient_quota":
+            return False
+        return error.status_code in (408, 409, 429) or error.status_code >= 500
+    return False
+
+
+def _retry_after(error):
+    try:
+        value = float(error.response.headers.get("retry-after"))
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return min(max(value, 0.0), MAX_RETRY_AFTER)
 
 
 class LLMProviderError(Exception):
@@ -136,6 +169,28 @@ class OpenAIAnswerProvider:
         """Use the answer model without course context or document citations."""
         return self.generate(instructions, None, question, [])
 
+    async def _with_retries(self, call, *, stage, model):
+        """Run `call()`; retry transient provider errors with backoff, recording each retry, failure and recovery."""
+        from openai import OpenAIError
+        from backend.app import assistant_events
+        store = getattr(self.usage_recorder, "store", None) if self.usage_recorder else None
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                result = await call()
+            except OpenAIError as error:
+                if not is_transient(error) or attempt > len(RETRY_DELAYS):
+                    assistant_events.record(store, stage, "failed", error=error, attempt=attempt, model=model)
+                    raise
+                assistant_events.record(store, stage, "retry", error=error, attempt=attempt, model=model)
+                delay = _retry_after(error)
+                await _sleep((RETRY_DELAYS[attempt - 1] if delay is None else delay) + _jitter())
+                continue
+            if attempt > 1:
+                assistant_events.record(store, stage, "recovered", attempt=attempt, model=model)
+            return result
+
     async def rewrite_query(self, course_id, question, conversation_context):
         """Resolve references only; return no answer and select no invented IDs."""
         from openai import AsyncOpenAI, OpenAIError
@@ -146,13 +201,14 @@ class OpenAIAnswerProvider:
         instructions = QUERY_INSTRUCTIONS
         accounted = False
         try:
-            async with AsyncOpenAI(api_key=self._api_key, timeout=45, max_retries=1) as client:
-                response = await client.responses.create(
+            # The library's own single retry is replaced by _with_retries (backoff, Retry-After, saved diagnostics).
+            async with AsyncOpenAI(api_key=self._api_key, timeout=UNDERSTANDING_TIMEOUT, max_retries=0) as client:
+                response = await self._with_retries(lambda: client.responses.create(
                     model=model, store=False, instructions=instructions, max_output_tokens=1100,
                     reasoning={"effort": "low"},
                     input=json.dumps({"course_id": course_id, "question": question, "conversation_context": conversation_context}),
                     text={"format": {"type": "json_schema", "name": "retrieval_query", "strict": True, "schema": schema}},
-                )
+                ), stage="query_understanding", model=model)
                 if self.usage_recorder:
                     self.usage_recorder.record(response, feature='query_understanding', operation='responses.create', model=model)
                     accounted = True

@@ -281,9 +281,53 @@ def query_context(course_id, store, conversation_context=None):
     return context
 
 
+class DegradedPlan(dict):
+    """A locally built plan used because the model could not understand the question (see fallback_understanding)."""
+
+
+FALLBACK_NOTICE = ("Question understanding was unavailable, so I searched your course material directly. "
+                   "Live Canvas details such as deadlines were not checked.")
+# A fallback is only safe when nothing depends on understanding: no live Canvas facts, no specific numbered
+# assignment/document (so "homework 1" can never become "homework 10"), no solution request, no follow-up.
+_LIVE_FACTS = re.compile(r"\b(?:due|deadlines?|submitted|submission|did\s+i\s+(?:submit|turn)|have\s+i\s+(?:submitted|turned)|"
+                         r"how\s+many\s+points|points\s+(?:possible|worth)|my\s+(?:grade|score)|score\s+on)\b", re.I)
+_SPECIFIC_WORK = re.compile(r"\b(?:hw|homework|assignment|lab|project|quiz|exam|midterm|final|iteration|problem|question|q|part|"
+                            r"exercise|chapter|lecture|slides?|week|module)\s*#?\s*\d+|\b(?:hw|lab|q)\d+\b|#\d+", re.I)
+_FOLLOW_UP = re.compile(r"^\s*(?:and|also|then|so|ok|okay|but|why|what\s+about|how\s+about|that|this|it|those|these|the\s+same)\b|"
+                        r"\b(?:same|previous|earlier|above|again|that\s+one|this\s+one|the\s+last\s+one)\b", re.I)
+
+
+def fallback_understanding(question):
+    """A plain course-material search plan, or None when guessing could give a wrong or unsafe answer."""
+    from backend.app.assignment_policy_service import solution_request
+    text = (question or "").strip()
+    if len(text.split()) < 4 or _LIVE_FACTS.search(text) or _SPECIFIC_WORK.search(text) or _FOLLOW_UP.search(text):
+        return None
+    if solution_request(text, None):                    # the AI-use restriction checks still run on the question itself
+        return None
+    return DegradedPlan(empty_understanding(text, intent="course_wide_question"))
+
+
 async def understand_question(course_id, question, *, store, provider, conversation_context=None):
-    """Make exactly one understanding call; backend resolution happens afterward."""
+    """Make one understanding request (with retries inside the provider); backend resolution happens afterward.
+
+    If the model still cannot understand the question, a safe subset falls back to a plain course search with a notice;
+    everything else raises so the student can retry (a wrong guess would be worse than an error).
+    """
+    from backend.app import assistant_events
     from backend.app.embedding_service import default_store
-    context = query_context(course_id, store or default_store(), conversation_context)
+    from backend.app.llm_service import LLMProviderError
+    store = store or default_store()
+    context = query_context(course_id, store, conversation_context)
     from backend.app.conversation_state_service import interpret_turn
-    return interpret_turn(question, checked_understanding(await provider.rewrite_query(course_id, question, context), question), context)
+    try:
+        value = await provider.rewrite_query(course_id, question, context)
+        plan = checked_understanding(value, question)
+    except (LLMProviderError, PlanRejected) as error:
+        fallback = fallback_understanding(question)
+        if fallback is None:
+            assistant_events.record(store, "query_understanding", "failed", error=error)
+            raise
+        assistant_events.record(store, "query_understanding", "fallback", error=error)
+        return fallback
+    return interpret_turn(question, plan, context)

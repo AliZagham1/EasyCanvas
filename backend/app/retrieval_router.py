@@ -91,6 +91,17 @@ def _generic_material_reference(reference, snapshot):
     return bool(words) and words <= GENERIC_MATERIAL_WORDS | course_words
 
 
+_ALL_COURSES = re.compile(r"\b(?:every|each)\s+(?:one\s+of\s+(?:my\s+)?)?courses?\b|\b(?:all|any|other)\b[^.?!]*\bcourses\b|"
+                          r"\bmy\s+courses\b|\bacross\b[^.?!]*\bcourses\b", re.I)
+SINGLE_COURSE_NOTICE = ("I can only answer about one course at a time, the one selected here. "
+                        "Ask about this course, or switch courses to ask about another.")
+
+
+def _course_scope_notice(plan, question, default):
+    """A request about several courses is a scope limit, not a request to pick the course it names."""
+    return SINGLE_COURSE_NOTICE if _ALL_COURSES.search(f"{plan.get('course_reference') or ''} {question}") else default
+
+
 def _selected_course(reference, snapshot):
     if not reference:
         return True
@@ -129,6 +140,15 @@ def _general_concept_allowed(question, plan, context):
     return bool(re.match(r'\s*(?:what (?:is|are|does)|how (?:does|do|can)|why (?:does|do|is|are)|explain|define|describe|give (?:me )?an? example of)\b', text))
 
 
+# Course logistics live in the syllabus. Searching everything lets announcements ("office hours canceled") outrank the
+# actual hours. Phrases are specific on purpose: a word like "contact" alone would capture ordinary subject questions.
+_SYLLABUS_LOGISTICS = re.compile(
+    r"\boffice hours?\b|\b(?:instructor|professor|teacher|teaching assistant|ta)(?:'s|s)?\s+(?:name|e-?mail|contact|phone|office)\b|"
+    r"\bwho(?:'s| is)\s+(?:the|my)\s+(?:instructor|professor|teacher)\b|\bcontact\s+(?:the|my)\s+(?:instructor|professor|teacher)\b|"
+    r"\b(?:grading|grade)\s+(?:scale|breakdown|weights?)\b|\bclass\s+(?:meeting\s+)?(?:times?|location|schedule)\b|"
+    r"\bwhere\s+(?:does|do)\s+(?:the\s+)?class\s+meet\b|\bsyllabus\b", re.I)
+
+
 def _course_policy_request(question, intent):
     """Keep course rules away from similarly named assignment or grade items."""
     if intent in FACT_INTENTS or intent in ('list_assignments', 'solve_question', 'study_plan'):
@@ -136,7 +156,8 @@ def _course_policy_request(question, intent):
     text = question.casefold()
     if re.search(r'\b(assignment|homework|grade item|points|due|deadline|submitted|submission|rubric)\b', text):
         return False
-    return bool(re.search(r'\b(policy|policies|rules|attendance|absences?|late work|make.?up work|academic integrity)\b', text))
+    return bool(re.search(r'\b(policy|policies|rules|attendance|absences?|late work|make.?up work|academic integrity)\b', text)
+                or _SYLLABUS_LOGISTICS.search(text))
 
 
 def _syllabus_documents(documents):
@@ -207,7 +228,9 @@ def _assignment_list(course_id, question, plan, snapshot, context, now):
     if plan['operation'] == 'exclude':
         excluded.update((context.get('conversation_state') or {}).get('excluded_assignment_ids', []))
     records = [a for a in records if a['canvas_id'] not in excluded]
-    results = structured.current_fact_evidence(course_id, records, ['assignment_title'], structured.course_timezone(snapshot), now)
+    wants_dates = bool(re.search(r'\b(?:due|deadlines?|when)\b', question, re.I))      # "list my homework and when it is due"
+    results = structured.current_fact_evidence(course_id, records, ['deadline'] if wants_dates else ['assignment_title'],
+                                               structured.course_timezone(snapshot), now)
     if not results:
         results = _empty_current_list(course_id, 'No current Canvas assignments match that selection.', now)
     return {'course_id':course_id, 'status':'ready', 'results':results, 'direct_response':True,
@@ -342,7 +365,7 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
         plan = _correct_standalone_concept(question, plan)
         intent = plan['intent']
     if not _selected_course(plan['course_reference'], snapshot):
-        return _notice(course_id, plan, 'Please select the course named in your question.', clarify=True)
+        return _notice(course_id, plan, _course_scope_notice(plan, question, 'Please select the course named in your question.'), clarify=True)
     if intent == 'general_concept':
         if _general_concept_allowed(question, plan, context):
             return {'course_id': course_id, 'status': 'ready', 'results': [], 'resolved_documents': [],
@@ -350,6 +373,18 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
         # A mistaken general classification must not bypass course grounding.
         plan['intent'] = 'course_wide_question'
         intent = plan['intent']
+    if (intent in FACT_INTENTS or intent == 'list_assignments') and _ALL_COURSES.search(question):
+        return _notice(course_id, plan, SINGLE_COURSE_NOTICE, clarify=True)     # never answer one course as if it were all of them
+    if (intent == 'list_assignments' and not (plan.get('deadline_reference') or '').strip() and re.search(r'\bdue\b', question, re.I)
+            and not re.search(r'\b(?:all|every|each|list)\b', question, re.I) and not plan['included_references']
+            and not plan['excluded_references'] and plan['operation'] not in ('exclude', 'select', 'correct')):
+        # "What is due?" with no date means what is coming up, not every assignment since the first week (EC-023).
+        plan = {**plan, 'deadline_reference': 'upcoming'}
+    if intent == 'list_assignments' and (plan.get('deadline_reference') or '').strip():
+        # "What is due tonight?" names a date. Listing every assignment by title would ignore it (EC-023), so answer with the
+        # deadlines inside that window, plus each item's submission status, whatever label the model chose.
+        plan = {**plan, 'intent': 'get_deadline', 'requested_data': ['deadline', 'submission_status'], 'requires_live_canvas': True}
+        intent = 'get_deadline'
     if intent == 'list_assignments':
         return _assignment_list(course_id, question, plan, snapshot, context, now or datetime.now(timezone.utc))
     # Course-wide knowledge still uses the existing course-scoped search.
@@ -359,7 +394,7 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
         result = retrieval_service.retrieve_evidence(course_id, plan["query"], store=store, provider=provider, **options)
         return {**result, "query_understanding": plan, "retrieval_route": "course_material"}
     if not _selected_course(plan["course_reference"], snapshot):
-        return _notice(course_id, plan, "That question names a different course. Please select that course before asking.", clarify=True)
+        return _notice(course_id, plan, _course_scope_notice(plan, question, "That question names a different course. Please select that course before asking."), clarify=True)
     assignments = [a for a in snapshot.get("assignments", []) if a.get("course_id", course_id) == course_id]
     active = _active_assignment_ids(context, assignments) if plan["use_active_documents"] else set()
     reference = (plan["assignment_reference"] or ("homework " + plan["homework_number"] if plan["homework_number"] else "")
@@ -415,7 +450,7 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
     now = now or datetime.now(timezone.utc)
     zone = structured.course_timezone(snapshot)
     direct = intent in ("get_deadline", "get_submission_status", "get_assignment_details")
-    date_reference = plan["deadline_reference"]
+    date_reference = structured.restore_date_qualifier(plan["deadline_reference"], question)
     if date_reference and reference and not record:
         return _notice(course_id, plan, "Which assignment do you mean? " + "; ".join(resolution["candidates"][:6])
                        if resolution["status"] == "ambiguous" else "I could not find that assignment in this course.",
@@ -437,9 +472,11 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
             try:
                 window = structured.date_window(date_reference, now, zone)
             except ValueError:
-                return _notice(course_id, plan, "Please specify today, tomorrow, a weekday, this week, next week, or a date as YYYY-MM-DD.", clarify=True)
+                return _notice(course_id, plan, structured.DATE_PHRASE_HELP, clarify=True)
             plan["requires_live_canvas"] = True
             matches = [a for a in structured.current_assignments(course_id) if structured.due_in_window(a["metadata"], window)]
+            if plan['entity_type'] == 'homework':
+                matches = [a for a in matches if 'homework' in title_words(a.get('title') or '')]
             matches.sort(key=lambda a: datetime.fromisoformat(a["metadata"]["due_at"].replace("Z", "+00:00")))
             if direct and not reference:
                 records = matches
@@ -456,11 +493,14 @@ def _route_query(course_id, question, understanding, *, store=None, provider=Non
     except requests.RequestException:
         raise LLMProviderError("Current Canvas information is unavailable. Please retry.") from None
     if direct:
-        requested = {"get_deadline": ["deadline"], "get_submission_status": ["submission_status"]}.get(intent)
+        requested = {"get_deadline": ["deadline"] + (["submission_status"] if "submission_status" in plan["requested_data"] else []),
+                     "get_submission_status": ["submission_status"]}.get(intent)
         requested = requested or [value for value in plan["requested_data"] if value in ("points", "assignment_title")]
         results = structured.current_fact_evidence(course_id, records, requested, zone, now)
         if not results:
-            text = 'No future unsubmitted Canvas assignments were found.' if re.search(r'\bnext\b', question, re.I) else 'No Canvas assignments have a deadline in that window.'
+            text = ('No future unsubmitted Canvas assignments were found.' if re.search(r'\bnext\b', question, re.I)
+                    else f'No Canvas assignments are due in the next {structured.UPCOMING_DAYS} days.' if plan['deadline_reference'] == 'upcoming'
+                    else 'No Canvas assignments have a deadline in that window.')
             results = _empty_current_list(course_id, text, now)
         return {"course_id": course_id, "status": "ready", "results": results, "direct_response": True,
                 "resolved_documents": [f"assignment:{a['canvas_id']}" for a in records],

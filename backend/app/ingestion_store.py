@@ -266,6 +266,10 @@ class IngestionStore:
                     pricing_version TEXT NOT NULL,
                     PRIMARY KEY (namespace, operation_id)
                 );
+                CREATE TABLE IF NOT EXISTS assistant_events (
+                    namespace TEXT NOT NULL, recorded_at TEXT NOT NULL, stage TEXT NOT NULL, outcome TEXT NOT NULL,
+                    error_class TEXT, status_code INTEGER, attempt INTEGER, model TEXT
+                );
                 CREATE TABLE IF NOT EXISTS class_meetings (
                     namespace TEXT NOT NULL, meeting_id TEXT NOT NULL, course_id INTEGER NOT NULL,
                     status TEXT NOT NULL, kind TEXT NOT NULL, days_json TEXT NOT NULL,
@@ -938,6 +942,31 @@ class IngestionStore:
                 return
             connection.execute('UPDATE api_usage SET credential_fingerprint=?, credential_hint=? WHERE namespace=? AND credential_fingerprint IS NULL',
                                (fingerprint, hint, self.namespace))
+
+    # ---- assistant diagnostics: what failed and how, never what was asked ----
+    ASSISTANT_EVENT_LIMIT = 1000
+
+    def record_assistant_event(self, entry):
+        """Keep a small rolling log of retries, failures and fallbacks. Holds no question text, answers or keys."""
+        with self._connection() as connection:
+            connection.execute(
+                'INSERT INTO assistant_events (namespace, recorded_at, stage, outcome, error_class, status_code, attempt, model) '
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                (self.namespace, entry['recorded_at'], entry['stage'], entry['outcome'], entry.get('error_class'),
+                 entry.get('status_code'), entry.get('attempt'), entry.get('model')))
+            connection.execute(
+                'DELETE FROM assistant_events WHERE namespace=? AND rowid NOT IN '
+                '(SELECT rowid FROM assistant_events WHERE namespace=? ORDER BY rowid DESC LIMIT ?)',
+                (self.namespace, self.namespace, self.ASSISTANT_EVENT_LIMIT))
+
+    def load_assistant_events(self, since=None):
+        query, args = 'SELECT * FROM assistant_events WHERE namespace=?', [self.namespace]
+        if since:
+            query += ' AND recorded_at>=?'
+            args.append(since)
+        with self._connection() as connection:
+            rows = connection.execute(query + ' ORDER BY rowid', args).fetchall()
+        return [{key: row[key] for key in row.keys() if key != 'namespace'} for row in rows]
 
     # ---- class schedule: confirmed meetings and dismissed suggestions (user-owned data) ----
     _MEETING_FIELDS = ('meeting_id', 'course_id', 'status', 'kind', 'days', 'start_time', 'end_time', 'location',
