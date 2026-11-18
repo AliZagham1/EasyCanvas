@@ -82,6 +82,13 @@ class CatalogAndDetailsTests(unittest.TestCase):
         self.assertEqual([m["days"] for m in courses[42]["meetings"]], [["TUE"]])
         self.assertEqual([m["days"] for m in courses[43]["meetings"]], [["FRI"]])
 
+    def test_study_blocks_are_not_listed_as_class_times_on_course_pages(self):
+        schedule_service.create_meeting(self.store, 42, {"days": ["TUE"], "start_time": "09:00", "end_time": "10:00"})
+        schedule_service.create_meeting(self.store, 42, {"days": ["WED"], "start_time": "14:00", "end_time": "16:00", "kind": "study"})
+        course = {c["course_id"]: c for c in cos.build_catalog(self.store)["courses"]}[42]
+        self.assertEqual([m["days"] for m in course["meetings"]], [["TUE"]])
+        self.assertEqual([m["days"] for m in cos.build_details(self.store, 42)["meetings"]], [["TUE"]])
+
     def test_a_course_without_content_still_appears_with_zero_counts(self):
         store = IngestionStore("empty-student", Path(self.directory.name) / "empty.sqlite3")
         store.save_course({"course_id": 7, "synced_at": "now", "course": {"metadata": {"name": "X", "course_code": "2268-CSE-1000-001"}}})

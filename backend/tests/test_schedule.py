@@ -212,6 +212,13 @@ class ScheduleApiTests(unittest.TestCase):
         self.assertEqual((code, edited["start_time"], edited["location"], edited["end_time"]), (200, "11:15", "NH 110", "12:20"))
         self.assertEqual(self.course()["suggestions"], [])
 
+    def test_study_block_is_saved_as_its_own_kind_and_never_suggested(self):
+        code, made = self.call("POST", "/api/schedule/meetings", {"course_id": 42, "days": ["TUE"], "start_time": "14:00",
+                                                                  "end_time": "16:00", "kind": "study"})
+        self.assertEqual((code, made["kind"], made["source"]), (201, "study", "manual"))
+        self.assertIn("study", [m["kind"] for m in self.course()["meetings"]])
+        self.assertEqual(self.call("PUT", f"/api/schedule/meetings/{made['meeting_id']}", {"end_time": "17:00"})[1]["kind"], "study")
+
     def test_manual_entry_create_edit_delete(self):
         code, made = self.call("POST", "/api/schedule/meetings", {"course_id": 42, "days": ["WED"], "start_time": "17:30",
                                                                   "end_time": "19:00", "kind": "lab", "location": " ERB 100 "})

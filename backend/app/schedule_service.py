@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 
 DAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-KINDS = ("lecture", "lab", "discussion", "other")
+KINDS = ("lecture", "lab", "discussion", "other", "study")   # "study" is the student's own block, never a class
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 MAX_LOCATION = 120
 MAX_QUOTE = 240

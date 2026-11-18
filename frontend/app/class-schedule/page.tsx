@@ -13,7 +13,7 @@ import NextClassCard from "../components/next-class-card";
 import ScheduleGrid from "../components/schedule-grid";
 
 type FormState =
-  | { type: "new"; courseId: number; days?: DayCode[]; note?: string }
+  | { type: "new"; courseId: number; days?: DayCode[]; note?: string; kind?: "study" }
   | { type: "edit"; courseId: number; meeting: Meeting }
   | { type: "confirm"; courseId: number; suggestion: Suggestion };
 
@@ -126,17 +126,20 @@ export default function ClassSchedulePage() {
               <section key={course.course_id} className={`coursework-panel schedule-course ${getCourseAccent(course.course_id)}`} aria-labelledby={labelId}>
                 <div className="panel-header">
                   <h2 id={labelId} className="section-title">{courseLabel(course)} <span className="priority-count">{courseTitle(course.name)}</span></h2>
-                  <button className="primary-button" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
+                  <div className="meeting-buttons">
+                    <button className="primary-button" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
+                    <button className="primary-button" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id, kind: "study" }); }}>Add study block</button>
+                  </div>
                 </div>
 
                 <ul className="meeting-list">
                   {course.meetings.map((meeting) => (
                     <li key={meeting.meeting_id}>
                       <div>
-                        <strong>{formatDays(meeting.days)}</strong> · {formatRange(meeting.start_time, meeting.end_time)}
+                        {meeting.kind === "study" && <span className="study-tag">Study block</span>} <strong>{formatDays(meeting.days)}</strong> · {formatRange(meeting.start_time, meeting.end_time)}
                         {meeting.location && <span> · {meeting.location}</span>}
                         <span className="meeting-meta">
-                          {KIND_LABEL[meeting.kind]} · {meeting.source === "syllabus" ? "Confirmed from your syllabus" : "Added by you"}
+                          {meeting.kind === "study" ? "Your own study time" : KIND_LABEL[meeting.kind]} · {meeting.source === "syllabus" ? "Confirmed from your syllabus" : "Added by you"}
                         </span>
                       </div>
                       <div className="meeting-buttons">
@@ -185,10 +188,10 @@ export default function ClassSchedulePage() {
                 {open && (
                   <MeetingForm
                     key={open.type === "edit" ? open.meeting.meeting_id : open.type === "confirm" ? open.suggestion.fingerprint : `new-${course.course_id}`}
-                    title={open.type === "edit" ? "Edit class time" : open.type === "confirm" ? "Edit before confirming" : "Add class time"}
-                    submitLabel={open.type === "edit" ? "Save changes" : open.type === "confirm" ? "Confirm" : "Add class time"}
+                    title={open.type === "edit" ? (open.meeting.kind === "study" ? "Edit study block" : "Edit class time") : open.type === "confirm" ? "Edit before confirming" : open.kind === "study" ? "Add study block" : "Add class time"}
+                    submitLabel={open.type === "edit" ? "Save changes" : open.type === "confirm" ? "Confirm" : open.kind === "study" ? "Add study block" : "Add class time"}
                     note={open.type === "new" ? open.note : undefined}
-                    initial={open.type === "edit" ? open.meeting : open.type === "confirm" ? open.suggestion : open.days ? { days: open.days } : undefined}
+                    initial={open.type === "edit" ? open.meeting : open.type === "confirm" ? open.suggestion : open.kind === "study" ? { kind: "study" } : open.days ? { days: open.days } : undefined}
                     onSubmit={submit(course, open)} onCancel={() => { setForm(null); setFormError(""); }} error={formError} busy={busy} />
                 )}
 

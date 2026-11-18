@@ -1,5 +1,5 @@
 import { getCourseAccent } from "@/lib/coursework";
-import { DAY_LONG, DAY_SHORT, DAYS, KIND_LABEL, courseLabel, courseTitle, formatRange, formatTime, layoutWeek, toMinutes } from "@/lib/schedule";
+import { isStudy, DAY_LONG, DAY_SHORT, DAYS, KIND_LABEL, courseLabel, courseTitle, formatRange, formatTime, layoutWeek, toMinutes } from "@/lib/schedule";
 import type { DayCode, Meeting, ScheduleCourse } from "@/lib/schedule";
 
 const HOUR_PX = 52;
@@ -15,6 +15,7 @@ export default function ScheduleGrid({ courses }: { courses: ScheduleCourse[] })
 
   return (
     <div className="schedule-view">
+      {meetings.some(isStudy) && <p className="schedule-legend"><span className="legend-swatch" /> Study block</p>}
       <div className="schedule-grid" aria-hidden="true" style={{ "--days": days.length, "--hour": `${HOUR_PX}px` } as React.CSSProperties}>
         <div className="schedule-corner" />
         {days.map((day) => <div key={day} className="schedule-dayhead">{DAY_SHORT[day]}</div>)}
@@ -28,10 +29,10 @@ export default function ScheduleGrid({ courses }: { courses: ScheduleCourse[] })
               const height = Math.max(((block.endMin - block.startMin) / 60) * HOUR_PX, 22);
               const course = byCourse.get(block.meeting.course_id);
               return (
-                <div key={`${day}-${block.meeting.meeting_id}`} className={`schedule-block ${getCourseAccent(block.meeting.course_id)}`}
+                <div key={`${day}-${block.meeting.meeting_id}`} className={`schedule-block ${getCourseAccent(block.meeting.course_id)}${isStudy(block.meeting) ? " is-study" : ""}`}
                   title={`${label(block.meeting)} · ${formatRange(block.meeting.start_time, block.meeting.end_time)}${block.meeting.location ? ` · ${block.meeting.location}` : ""}`}
                   style={{ top, height, left: `${(block.column / block.columns) * 100}%`, width: `${100 / block.columns}%` }}>
-                  <strong>{label(block.meeting)}</strong>
+                  <strong>{isStudy(block.meeting) ? "Study · " : ""}{label(block.meeting)}</strong>
                   <span>{formatTime(block.meeting.start_time)}</span>
                   {block.meeting.location && height >= 52 && <span>{block.meeting.location}</span>}
                   {course?.name && height >= 80 && <span className="schedule-block-name">{courseTitle(course.name)}</span>}
@@ -48,7 +49,7 @@ export default function ScheduleGrid({ courses }: { courses: ScheduleCourse[] })
             <ul>
               {meetings.filter((meeting) => meeting.days.includes(day)).sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time))
                 .map((meeting) => (
-                  <li key={meeting.meeting_id} className={getCourseAccent(meeting.course_id)}>
+                  <li key={meeting.meeting_id} className={`${getCourseAccent(meeting.course_id)}${isStudy(meeting) ? " is-study" : ""}`}>
                     <span className="agenda-time">{formatRange(meeting.start_time, meeting.end_time)}</span>
                     <span><strong>{label(meeting)}</strong>{meeting.kind !== "lecture" ? ` · ${KIND_LABEL[meeting.kind]}` : ""}{meeting.location ? ` · ${meeting.location}` : ""}</span>
                   </li>

@@ -2,12 +2,12 @@
 // Only confirmed meetings are ever used for planning; suggestions are shown for review and never trusted.
 
 export type DayCode = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
-export type MeetingKind = "lecture" | "lab" | "discussion" | "other";
+export type MeetingKind = "lecture" | "lab" | "discussion" | "other" | "study";
 
 export const DAYS: DayCode[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 export const DAY_SHORT: Record<DayCode, string> = { MON: "Mon", TUE: "Tue", WED: "Wed", THU: "Thu", FRI: "Fri", SAT: "Sat", SUN: "Sun" };
 export const DAY_LONG: Record<DayCode, string> = { MON: "Monday", TUE: "Tuesday", WED: "Wednesday", THU: "Thursday", FRI: "Friday", SAT: "Saturday", SUN: "Sunday" };
-export const KIND_LABEL: Record<MeetingKind, string> = { lecture: "Lecture", lab: "Lab", discussion: "Discussion", other: "Other" };
+export const KIND_LABEL: Record<MeetingKind, string> = { lecture: "Lecture", lab: "Lab", discussion: "Discussion", other: "Other", study: "Study block" };
 
 export type Meeting = {
   meeting_id: string; course_id: number; kind: MeetingKind; days: DayCode[]; start_time: string; end_time: string;
@@ -126,6 +126,7 @@ export function nextClass(courses: ScheduleCourse[], nowMs: number): NextClass |
   for (const course of courses) {
     const { day: today, minutes: now } = localClock(nowMs, resolveZone(course.time_zone));
     for (const meeting of course.meetings) {
+      if (meeting.kind === "study") continue;          // study blocks are never "your next class"
       const start = toMinutes(meeting.start_time), end = toMinutes(meeting.end_time);
       for (const code of meeting.days) {
         const dayIndex = DAYS.indexOf(code);
@@ -154,6 +155,8 @@ export function describeNext(next: NextClass): string {
   }
   return next.daysAhead === 1 ? "Tomorrow" : `On ${DAY_LONG[next.day]}`;
 }
+
+export const isStudy = (meeting: Pick<Meeting, "kind">) => meeting.kind === "study";
 
 export const courseLabel = (course: Pick<ScheduleCourse, "course_code" | "name">) => {
   const match = course.course_code?.match(/(?:^|[^a-z0-9])([a-z]{2,10})[\s_-]*(\d{3,5}[a-z]?)(?=$|[^a-z0-9])/i);

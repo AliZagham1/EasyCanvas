@@ -136,3 +136,12 @@ test("course titles drop the Canvas term and code prefix", () => {
   assert.equal(S.courseTitle(null), "");
   assert.equal(S.courseTitle("2268-CSE-3380-003-"), "2268-CSE-3380-003-");   // nothing left: keep the original
 });
+
+test("a study block is drawn on the week but is never the next class", () => {
+  const study = meeting(["TUE"], "13:00", "15:00", { kind: "study" });
+  const lecture = meeting(["THU"], "09:00", "10:00");
+  assert.equal(S.nextClass([course([study])], CHI_TUE_NOON), null);
+  assert.equal(S.nextClass([course([study, lecture])], CHI_TUE_NOON).meeting.kind, "lecture");
+  assert.equal(S.KIND_LABEL.study, "Study block");
+  assert.equal(S.layoutWeek([study]).blocks.length, 1);
+});

@@ -82,7 +82,7 @@ def _modules(snapshot):
 
 
 def _meetings(store, course_id):
-    return [meeting for meeting in store.list_class_meetings("confirmed") if meeting["course_id"] == course_id]
+    return [meeting for meeting in store.list_class_meetings("confirmed") if meeting["course_id"] == course_id and meeting["kind"] != "study"]
 
 
 def _counts(snapshot):
