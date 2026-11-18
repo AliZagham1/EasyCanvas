@@ -171,7 +171,7 @@ test('the Dashboard "View" link opens the course page', async ({ page }) => {
   await page.route('**/api/ingestion', (route) => route.fulfill({ json: { status: 'completed' } }));
   await page.route('**/api/schedule', (route) => route.fulfill({ json: { courses: [] } }));
   await page.goto('/');
-  const view = page.getByRole('link', { name: 'View →' });
+  const view = page.getByRole('link', { name: /CSE 4321/ });
   await expect(view).toHaveAttribute('href', '/courses/1');
 });
 

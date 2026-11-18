@@ -120,6 +120,18 @@ test("deadlines include time and handle unavailable dates without inventing valu
   assert.equal(formatDueDate("invalid"), "Due date unavailable");
 });
 
+test("compact due dates drop the zone, keep the time, and show the year only when it is not the current one", () => {
+  const { formatDueShort } = loadCoursework();
+  const now = Date.parse("2026-11-18T12:00:00Z");
+  const same = formatDueShort("2026-11-19T17:30:00Z", now);
+  assert.match(same, / · /);
+  assert.match(same, /\d+:30/);
+  assert.doesNotMatch(same, /2026|UTC|GMT|CST/);
+  assert.match(formatDueShort("2027-01-05T17:30:00Z", now), /2027/);
+  assert.equal(formatDueShort(null, now), "Due date unavailable");
+  assert.equal(formatDueShort("invalid", now), "Due date unavailable");
+});
+
 test("course accents do not change when courses reorder or new courses are added", () => {
   const { getCourseAccent } = loadCoursework();
   const original = new Map(courses.map((course) => [course.id, getCourseAccent(course.id)]));

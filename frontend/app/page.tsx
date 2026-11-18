@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import { getCourses, getUpcomingAssignments, formatDueDate, getCourseAccent } from "@/lib/coursework";
+import { getCourses, getUpcomingAssignments, formatDueDate, formatDueShort, getCourseAccent } from "@/lib/coursework";
 import type { Course, Assignment } from "@/lib/coursework";
 import { formatCourseCode } from "@/lib/course-label";
-import AssignmentTable from "./components/assignment-table";
 import NextClassCard from "./components/next-class-card";
+import { describeDue, resolveTimeZone, urgencyBucket } from "@/lib/priorities";
+import { courseTitle } from "@/lib/schedule";
 import { useCourseSync } from "@/lib/use-course-sync";
+
+const PREVIEW = 8;
+const URGENCY_GROUPS = [
+  { key: "soon", title: "Due within 24 hours" },
+  { key: "next", title: "Due in 1–3 days" },
+  { key: "later", title: "Later" },
+] as const;
 
 export default function Home() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -19,6 +27,7 @@ export default function Home() {
   const [coursesError, setCoursesError] = useState(false);
   const [failedCourseIds, setFailedCourseIds] = useState<number[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [now, setNow] = useState(0);
   const syncCompleted = useCallback(() => {
     setCoursesLoading(true);
     setIsLoading(true);
@@ -43,6 +52,7 @@ export default function Home() {
         const result = await getUpcomingAssignments(courseData, controller.signal);
         if (controller.signal.aborted) return;
         setAssignments(result.assignments);
+        setNow(Date.now());
         setFailedCourseIds(result.failedCourseIds);
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -70,14 +80,23 @@ export default function Home() {
   const failedCourseNames = courses.filter((course) => failedCourseIds.includes(course.id))
     .map((course) => formatCourseCode(course.course_code, course.name)).join(", ");
 
-  const nextAssignment = assignments[0];
+  const zone = useMemo(() => resolveTimeZone(), []);
+  const grouped = useMemo(() => URGENCY_GROUPS.map((group) => ({
+    ...group,
+    items: now === 0 ? [] : assignments.slice(0, PREVIEW).filter((a) => urgencyBucket(Date.parse(a.due_at), now) === group.key),
+  })).filter((group) => group.items.length > 0), [assignments, now]);
+  const counts = useMemo(() => ({
+    soon: assignments.filter((a) => urgencyBucket(Date.parse(a.due_at), now) === "soon").length,
+    next: assignments.filter((a) => urgencyBucket(Date.parse(a.due_at), now) === "next").length,
+  }), [assignments, now]);
+  const statValue = (value: number) => isLoading || now === 0 ? "..." : assignmentsUnavailable ? "Unavailable" : value;
 
   return (
     <div className="page-content">
       <header className="page-header">
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-description">Your current academic workload at a glance.</p>
+          <p className="page-description">What needs your attention.</p>
         </div>
         <button
           className="primary-button"
@@ -89,38 +108,23 @@ export default function Home() {
         </button>
       </header>
 
-      <dl className="summary-grid" aria-label="Coursework overview">
-        <div className="summary-card" aria-busy={coursesLoading}>
-          <dt className="summary-label">Current Courses</dt>
-          <dd className={`summary-value${coursesError ? " summary-state" : ""}`}>
-            {coursesLoading ? "..." : coursesError ? "Unavailable" : courses.length}
-          </dd>
+      <dl className="stat-strip" style={{ "--stats": 3 } as React.CSSProperties} aria-label="Coursework overview" aria-busy={isLoading}>
+        <div className="stat">
+          <dt className="summary-label">Due within 24 hours</dt>
+          <dd className={`summary-value${assignmentsUnavailable ? " summary-state" : ""}`}>{statValue(counts.soon)}</dd>
         </div>
-        <div className="summary-card" aria-busy={isLoading}>
-          <dt className="summary-label">Upcoming Assignments</dt>
+        <div className="stat">
+          <dt className="summary-label">Due in 1–3 days</dt>
+          <dd className={`summary-value${assignmentsUnavailable ? " summary-state" : ""}`}>{statValue(counts.next)}</dd>
+        </div>
+        <div className="stat">
+          <dt className="summary-label">All upcoming</dt>
           <dd className={`summary-value${assignmentsUnavailable ? " summary-state" : ""}`}>
             {isLoading ? "..." : assignmentsUnavailable ? "Unavailable" : assignments.length}
-            {!isLoading && !assignmentsUnavailable && hasPartialCoverage && (
-              <span className="summary-qualifier"> (partial)</span>
-            )}
-          </dd>
-        </div>
-        <div className="summary-card" aria-busy={isLoading}>
-          <dt className="summary-label">Next Deadline</dt>
-          <dd className="deadline-summary">
-            {isLoading ? "Loading..." : assignmentsUnavailable ? "Unable to load deadlines" : nextAssignment ? (
-              <>
-                {nextAssignment.name}{" — "}
-                <time dateTime={nextAssignment.due_at}>{formatDueDate(nextAssignment.due_at)}</time>
-                <span className="summary-note">{formatCourseCode(nextAssignment.course_code)}</span>
-                {hasPartialCoverage && <span className="summary-note">Earliest among loaded courses.</span>}
-              </>
-            ) : hasPartialCoverage ? "No upcoming work in loaded courses" : "No upcoming work"}
+            {!isLoading && !assignmentsUnavailable && hasPartialCoverage && <span className="summary-qualifier"> (partial)</span>}
           </dd>
         </div>
       </dl>
-
-      <NextClassCard />
 
       {hasPartialCoverage && (
         <p className="coverage-notice" role="status">
@@ -129,85 +133,81 @@ export default function Home() {
         </p>
       )}
 
-      <section className="coursework-panel" aria-labelledby="upcoming-title" aria-busy={isLoading}>
-        <div className="panel-header">
-          <h2 id="upcoming-title" className="section-title">Upcoming Assignments</h2>
-          <Link href="/upcoming" className="text-link">
-            View all upcoming
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
-              <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </Link>
-        </div>
-        {isLoading ? (
-          <p className="list-message" role="status">Loading upcoming assignments...</p>
-        ) : assignmentsUnavailable ? (
-          <p className="list-message" role="alert">Unable to load upcoming assignments. Reload this page to try again.</p>
-        ) : assignments.length === 0 ? (
-          <p className="list-message">{hasPartialCoverage ? "No upcoming assignments in loaded courses. Other courses are unavailable." : "No upcoming assignments found."}</p>
-        ) : (
-          <AssignmentTable assignments={assignments.slice(0, 5)} caption="Next five upcoming assignments, earliest deadline first" />
-        )}
-      </section>
+      <div className="dashboard-grid">
+        <section className="work-section dashboard-upcoming" aria-labelledby="upcoming-title" aria-busy={isLoading}>
+          <div className="work-section-head">
+            <h2 id="upcoming-title" className="section-title">Upcoming Assignments</h2>
+            <Link href="/upcoming" className="text-link">
+              View all upcoming
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+                <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </Link>
+          </div>
+          {isLoading ? (
+            <p className="list-message" role="status">Loading upcoming assignments...</p>
+          ) : assignmentsUnavailable ? (
+            <p className="list-message" role="alert">Unable to load upcoming assignments. Reload this page to try again.</p>
+          ) : assignments.length === 0 ? (
+            <p className="list-message">{hasPartialCoverage ? "No upcoming assignments in loaded courses. Other courses are unavailable." : "No upcoming assignments found."}</p>
+          ) : (
+            <>
+              {grouped.map((group) => (
+                <div key={group.key} role="group" aria-labelledby={`group-${group.key}`}>
+                  <h3 id={`group-${group.key}`} className="work-group-title">{group.title}</h3>
+                  <ul className="work-list">
+                    {group.items.map((assignment) => (
+                      <li key={`${assignment.course_id}-${assignment.id}`} className="work-row">
+                        <div className="work-main">
+                          <span className="work-title">{assignment.name}</span>
+                          <p className="work-meta" title={assignment.course_code}>{formatCourseCode(assignment.course_code)}</p>
+                        </div>
+                        <div className="work-due">
+                          <time dateTime={assignment.due_at} title={formatDueDate(assignment.due_at)}>{formatDueShort(assignment.due_at, now)}</time>
+                          <span className={`work-relative${group.key === "soon" ? " is-soon" : ""}`}>{describeDue(Date.parse(assignment.due_at), now, zone)}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              {assignments.length > PREVIEW && <p className="work-more">Showing the next {PREVIEW} of {assignments.length}.</p>}
+            </>
+          )}
+        </section>
 
-      <section className="coursework-panel" aria-labelledby="courses-title" aria-busy={coursesLoading}>
-        <div className="panel-header">
-          <h2 id="courses-title" className="section-title">Current Courses</h2>
-          <span className="panel-note">From Canvas</span>
-        </div>
-        {coursesLoading ? (
-          <p className="list-message" role="status">Loading your courses...</p>
-        ) : coursesError ? (
-          <p className="list-message" role="alert">Unable to load courses from Canvas. Reload this page to try again.</p>
-        ) : courses.length === 0 ? (
-          <p className="list-message">No current courses found in Canvas.</p>
-        ) : (
-          <table className="coursework-table courses-table" role="table">
-            <caption className="sr-only">Current Canvas courses and upcoming assignment counts</caption>
-            <colgroup>
-              <col className="course-code-column" />
-              <col className="course-name-column" />
-              <col className="course-upcoming-column" />
-            </colgroup>
-            <thead role="rowgroup">
-              <tr role="row">
-                <th scope="col" role="columnheader">Course</th>
-                <th scope="col" role="columnheader">Name</th>
-                <th scope="col" role="columnheader">Upcoming</th>
-              </tr>
-            </thead>
-            <tbody role="rowgroup">
+        <div className="dashboard-next"><NextClassCard /></div>
+
+        <section className="work-section dashboard-courses" aria-labelledby="courses-title" aria-busy={coursesLoading}>
+          <div className="work-section-head">
+            <h2 id="courses-title" className="section-title">Courses {!coursesLoading && !coursesError && <span className="priority-count">{courses.length}</span>}</h2>
+          </div>
+          {coursesLoading ? (
+            <p className="list-message" role="status">Loading your courses...</p>
+          ) : coursesError ? (
+            <p className="list-message" role="alert">Unable to load courses from Canvas. Reload this page to try again.</p>
+          ) : courses.length === 0 ? (
+            <p className="list-message">No current courses found in Canvas.</p>
+          ) : (
+            <ul className="course-list">
               {courses.map((course) => {
                 const courseLabel = formatCourseCode(course.course_code, course.name);
+                const count = isLoading ? "Loading..." : hasError || failedCourseIds.includes(course.id) ? "Unavailable" : `${getUpcomingCount(course.id)} upcoming`;
                 return (
-                  <tr key={course.id} className={getCourseAccent(course.id)} role="row">
-                    <td data-label="Course" role="cell">
-                      <div className="course-identity" title={course.course_code}>
-                        <span className="course-dot" aria-hidden="true" />
-                        <span className="course-code">{courseLabel}</span>
-                      </div>
-                    </td>
-                    <td data-label="Name" role="cell">
-                      <div>
-                        {course.name}
-                        {course.course_code && course.course_code !== courseLabel && course.course_code !== course.name && (
-                          <span className="cell-secondary">{course.course_code}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td data-label="Upcoming" role="cell">
-                      <div className="course-upcoming">
-                        <span>{isLoading ? "Loading..." : hasError || failedCourseIds.includes(course.id) ? "Assignments unavailable" : `${getUpcomingCount(course.id)} upcoming`}</span>
-                        <Link href={`/courses/${course.id}`} className="text-link">View →</Link>
-                      </div>
-                    </td>
-                  </tr>
+                  <li key={course.id} className={getCourseAccent(course.id)}>
+                    <Link href={`/courses/${course.id}`} className="course-row" title={course.name}>
+                      <span className="course-dot" aria-hidden="true" />
+                      <span className="course-row-code">{courseLabel}</span>
+                      <span className="course-row-name">{courseTitle(course.name)}</span>
+                      <span className="course-row-count">{count}</span>
+                    </Link>
+                  </li>
                 );
               })}
-            </tbody>
-          </table>
-        )}
-      </section>
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

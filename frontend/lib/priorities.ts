@@ -113,6 +113,13 @@ export function describeDue(dueMs: number, nowMs: number, zone: string): string 
   return days === 1 ? "Due tomorrow" : `Due in ${plural(days, "day")}`;
 }
 
+/** Which urgency group a still-open deadline falls into, using the same 24h / 72h limits as the Priorities levels. */
+export function urgencyBucket(dueMs: number, nowMs: number): "soon" | "next" | "later" {
+  const hours = (dueMs - nowMs) / 3_600_000;
+  if (hours <= HIGH_HOURS) return "soon";
+  return hours <= MEDIUM_HOURS ? "next" : "later";
+}
+
 // ------------------------------------------------------------------ classification
 const STATUS_LABELS: Record<SubmissionStatus, string> = {
   submitted: "Submitted",

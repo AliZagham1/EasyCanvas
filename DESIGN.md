@@ -83,7 +83,7 @@ This file records the approved visual system (light theme). `PRODUCT.md` and `AG
 
 ### Rollout status
 
-The visual system is being applied incrementally. **Phase 1 (done):** tokens, type scale, buttons, page headers, desktop sidebar and mobile navigation. **Phase 2 (next):** Dashboard and Priorities page layouts. The page-specific sections further down (Dashboard, Courses, Upcoming, Priorities, Class Schedule, Study Assistant) still describe the earlier page layouts and will be revised as each page is redesigned; where they conflict with the foundation rules above and below, the foundation rules win.
+The visual system is being applied incrementally. **Phase 1 (done):** tokens, type scale, buttons, page headers, desktop sidebar and mobile navigation. **Phase 2 (done):** Dashboard and Priorities layouts and the shared row pattern. **Next:** Upcoming, Courses, Class Schedule, Study Assistant and Settings. The page-specific sections further down (Courses, Upcoming, Class Schedule, Study Assistant) still describe the earlier page layouts and will be revised as each page is redesigned; where they conflict with the foundation rules above and below, the foundation rules win.
 
 ### Purpose
 
@@ -520,12 +520,7 @@ Do not place every feature on the dashboard.
 
 The dashboard should show a concise preview of upcoming work rather than duplicating the full Upcoming page. When a longer upcoming list exists elsewhere, prefer a short preview plus a clear action such as `View all upcoming`.
 
-Recommended content hierarchy:
-
-1. concise page header
-2. high-value summary
-3. upcoming or priority work
-4. course overview
+Implemented layout (Phase 2): a one-line header, a three-number **stat strip** framed by hairlines (due within 24 hours, due in 1-3 days, all upcoming), then two columns. The wide left column is **Upcoming Assignments**: the next eight deadlines grouped by urgency (due within 24 hours, due in 1-3 days, later), each a `.work-row`, with `View all upcoming`. The 320px right column holds **Next class** and a compact **Courses** list (code, cleaned course name, upcoming count; each row links to the course page). Below 900px the columns stack with Next class first. There are no tables, cards or per-row course colors on the Dashboard. Overdue work is not shown here because the Dashboard still reads only the existing upcoming-assignments data; adding it means reading the Priorities data and is a separate decision.
 
 Avoid decorative dashboard widgets with no clear student value.
 
@@ -564,23 +559,19 @@ Avoid making the user open separate course pages just to understand workload.
 
 ### Priorities
 
-The Priorities page should show ranked work and explain why.
+The Priorities page shows ranked work and explains why. Ranking is deterministic application logic; AI never invents it.
 
-Example:
-
-```text
-Static Analysis Homework
-High Priority
-
-Due tomorrow · Unsubmitted · High grade impact
-```
+Implemented presentation (Phase 2): a four-number stat strip, one toolbar row (labels beside their controls), then unboxed sections (Overdue, Upcoming, No due date, Not actionable, Completed). Each section is a header rule with the title, count and a short note, followed by `.work-row` rows. A row is the assignment title (neutral, a link that opens Canvas in a new tab), a muted line `course · status`, and on the right a compact date (`Thu, Nov 19 · 11:59 PM`, full date and zone in the tooltip) with the relative label (`Due tomorrow`).
 
 Rules:
 
-- Priority should come from deterministic application logic.
-- AI may explain the result but should not silently invent the ranking.
-- If a numeric score is shown, provide plain-English reasons.
-- Avoid unexplained percentages or confidence-style numbers.
+- No left stripes, no priority pills. Overdue is the section plus red due text; `Missing` is red text; High and Medium appear as the plain words "High priority" / "Medium priority" (amber); Low is announced to screen readers only.
+- Red means overdue, missing or an error. Amber means due soon. Nothing else is colored.
+- If a numeric score is ever shown, give plain-English reasons; avoid unexplained percentages.
+
+### Shared row pattern (`.work-row`)
+
+Two-column grid: title and meta on the left, due date and relative label on the right, hairline between rows, 8px/12px padding, hover fill. On phones it stacks to title, meta, then date and relative text on one line. Use it for any list of assignments; do not wrap it in a card.
 
 ### Class Schedule
 

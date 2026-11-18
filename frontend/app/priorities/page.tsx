@@ -176,14 +176,14 @@ export default function PrioritiesPage() {
       {showData && emptyMessage && <p className="list-message" role="status">{emptyMessage}</p>}
 
       {showData && sections.filter((section) => section.total > 0).map((section) => (
-        <section key={section.key} className="coursework-panel" aria-labelledby={`priority-${section.key}`} aria-busy={loading}>
-          <div className="panel-header">
+        <section key={section.key} className="work-section" aria-labelledby={`priority-${section.key}`} aria-busy={loading}>
+          <div className="work-section-head">
             <h2 id={`priority-${section.key}`} className="section-title">
               {section.title} <span className="priority-count">{section.total}</span>
             </h2>
             <span className="panel-note">{section.note}</span>
           </div>
-          <ul className="priority-list">
+          <ul className="priority-list work-list">
             {section.items.map((item) => <PriorityCard key={`${item.course_id}-${item.id}`} item={item} />)}
           </ul>
           {section.key === "overdue" && section.total > OVERDUE_PREVIEW && (

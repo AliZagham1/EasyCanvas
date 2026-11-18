@@ -167,3 +167,15 @@ test("API client: refresh query, error status and malformed payloads", async () 
   await assert.rejects(load(async () => ({ ok: false, status: 502 })).getPriorities(), /HTTP 502/);
   await assert.rejects(load(async () => ({ ok: true, json: async () => ({ assignments: "x" }) })).getPriorities(), /Invalid priorities response/);
 });
+
+test("urgency groups use the same 24 hour and 72 hour limits as the priority levels", () => {
+  const { urgencyBucket } = load();
+  const now = Date.parse("2026-11-18T12:00:00Z");
+  const hours = (n) => now + n * 3_600_000;
+  assert.equal(urgencyBucket(hours(1), now), "soon");
+  assert.equal(urgencyBucket(hours(24), now), "soon");
+  assert.equal(urgencyBucket(hours(24.1), now), "next");
+  assert.equal(urgencyBucket(hours(72), now), "next");
+  assert.equal(urgencyBucket(hours(72.1), now), "later");
+  assert.equal(urgencyBucket(hours(-2), now), "soon");   // a deadline that just passed is still the most urgent group
+});
