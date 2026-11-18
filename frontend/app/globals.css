@@ -953,41 +953,67 @@ a.schedule-due:hover { background: var(--row-hover); }
 }
 .schedule-agenda li.agenda-due { background: var(--surface); border: 1px solid var(--border-strong); border-left: 3px solid var(--course-accent, var(--accent)); }
 
-/* Study Plans */
-.plan { margin-bottom: var(--space-6); }
-.plan-meta { margin: 2px 0 0; color: var(--muted); font-size: var(--text-sm); }
-.plan-passed { color: var(--danger); font-weight: 500; }
-.plan-check { display: inline-flex; align-items: baseline; gap: var(--space-2); cursor: pointer; font-weight: 500; }
-.plan-check input { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+/* Study Plans: each plan is a card with a large title, a numbered list of steps, and readable text. */
+.plan-card { margin-bottom: var(--space-5); padding: var(--space-5) var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.plan-header { margin-bottom: var(--space-4); }
+.plan-title { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.3; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.plan-meta { margin: var(--space-1) 0 0; color: var(--foreground-secondary); font-size: var(--text-base); line-height: 1.5; }
+.plan-meta strong { font-weight: 600; }
+.plan-passed { color: var(--danger); }
+.plan-summary { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-base); }
+.plan-subhead { margin: 0 0 var(--space-1); color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
+.plan-steps { counter-reset: step; list-style: none; margin: 0; padding: 0; }
+.plan-step { counter-increment: step; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: start; gap: var(--space-1) var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.plan-number { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-top: 1px; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--table-heading); color: var(--foreground-secondary); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.plan-number::before { content: counter(step); }
+.plan-check { display: inline-flex; align-items: baseline; gap: var(--space-2); cursor: pointer; font-size: var(--text-md); font-weight: 500; line-height: 1.4; }
+.plan-check input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; align-self: center; accent-color: var(--accent); }
 .plan-check .is-done { color: var(--muted); text-decoration: line-through; }
-.plan-when { gap: var(--space-1) var(--space-3); }
-.plan-when .work-relative { min-width: 0; }
-.plan-add { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
-.plan-add input { flex: 1 1 240px; min-width: 0; min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-base); }
-.plan-add select, .plan-field select, .plan-field input { min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-base); }
+.plan-step-meta { margin: 2px 0 0 26px; color: var(--muted); font-size: var(--text-base); }
+.plan-when { display: grid; justify-items: end; gap: var(--space-1); text-align: right; font-size: var(--text-base); }
+.plan-time { color: var(--foreground); font-weight: 500; font-variant-numeric: tabular-nums; }
+.plan-unscheduled { color: var(--muted); }
+.plan-links { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 var(--space-3); }
+.plan-links .text-link { min-height: 0; font-size: var(--text-sm); }
+.plan-add { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-4) 0 var(--space-2); border-top: 1px solid var(--border); }
+.plan-add input { flex: 1 1 240px; min-width: 0; min-height: 36px; padding: 0 12px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-reading); }
+.plan-add select, .plan-field select, .plan-field input { min-height: 36px; padding: 0 12px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-reading); }
+.plan-add .primary-button { min-height: 36px; font-size: var(--text-base); }
 .plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) 0; }
-.plan-proposal { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--table-heading); }
-.plan-proposal h3 { margin: 0 0 var(--space-2); font-size: var(--text-base); font-weight: 600; }
-.plan-proposal ul { margin: 0 0 var(--space-2); padding: 0; list-style: none; font-size: var(--text-base); }
-.plan-proposal li + li { margin-top: var(--space-1); }
-.plan-form fieldset { margin: 0; padding: var(--space-3) 0 0; border: 0; }
-.plan-mode legend { margin-bottom: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.plan-footer { margin-top: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.plan-footer .primary-button { min-height: 36px; font-size: var(--text-base); }
+.plan-footer .text-link { font-size: var(--text-base); }
+.plan-proposal { margin: var(--space-3) 0 var(--space-1); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--table-heading); }
+.plan-proposal h3 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 600; }
+.plan-bullets { margin: 0 0 var(--space-3); padding-left: var(--space-5); list-style: disc; font-size: var(--text-md); line-height: 1.5; }
+.plan-bullets li { padding-left: var(--space-1); }
+.plan-bullets li + li { margin-top: var(--space-2); }
+.plan-bullets li::marker { color: var(--muted); }
+.plan-form fieldset { margin: 0; padding: var(--space-2) 0 0; border: 0; }
+.plan-mode legend { margin-bottom: var(--space-2); color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
 .plan-mode { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
-.plan-mode label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); cursor: pointer; }
-.plan-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--muted); font-size: var(--text-sm); }
+.plan-mode label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); font-size: var(--text-md); cursor: pointer; }
+.plan-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--foreground-secondary); font-size: var(--text-base); font-weight: 500; }
 .plan-field select { max-width: 100%; }
+.plan-field .assistant-hint { font-weight: 400; }
 .plan-custom { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); margin: var(--space-3) 0; }
 .plan-form > .plan-field { margin: var(--space-3) 0; max-width: 560px; }
 .plan-empty { max-width: 60ch; padding: var(--space-6) 0; }
-.plan-empty h2 { margin-bottom: var(--space-2); font-size: var(--text-md); font-weight: 600; }
-.plan-empty p { margin-bottom: var(--space-4); color: var(--muted); font-size: var(--text-base); line-height: 1.7; }
-.plan-prefs { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: var(--text-base); }
-.plan-prefs summary { min-height: 28px; cursor: pointer; font-weight: 500; }
+.plan-empty h2 { margin-bottom: var(--space-2); font-size: var(--text-lg); font-weight: 600; }
+.plan-empty p { margin-bottom: var(--space-4); color: var(--foreground-secondary); font-size: var(--text-md); line-height: 1.7; }
+.plan-prefs { margin-top: var(--space-6); padding: var(--space-4) var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-lg); font-size: var(--text-base); }
+.plan-prefs summary { min-height: 28px; cursor: pointer; font-size: var(--text-md); font-weight: 600; }
 .plan-prefs form { padding-top: var(--space-3); }
 @media (max-width: 767px) {
+  .plan-card, .plan-prefs { padding: var(--space-4); }
+  .plan-step { grid-template-columns: 32px minmax(0, 1fr); }
+  .plan-when { grid-column: 2; justify-items: start; text-align: left; }
+  .plan-links { justify-content: flex-start; }
   .plan-add input, .plan-add select, .plan-field select, .plan-field input { min-height: 44px; }
-  .plan-check input { width: 20px; height: 20px; }
+  .plan-add .primary-button, .plan-footer .primary-button { min-height: 44px; }
   .plan-check { min-height: 44px; align-items: center; }
+  .plan-check input { width: 22px; height: 22px; }
+  .plan-step-meta { margin-left: 30px; }
   .plan-prefs summary { min-height: 44px; display: flex; align-items: center; }
 }
 .plan-pick { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--table-heading); }

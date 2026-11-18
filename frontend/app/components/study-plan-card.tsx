@@ -54,39 +54,44 @@ export default function StudyPlanCard({ plan, proposal, now, zone, busy, onAddSt
     else { setConflicts(null); setPickError(outcome.error); }
   }
 
-  return <section className="work-section plan" aria-labelledby={labelId}>
-    <div className="work-section-head">
-      <div>
-        <h2 id={labelId} className="section-title">{plan.title}</h2>
-        <p className="plan-meta">
-          {formatCourseCode(plan.course_code, plan.course_name || "Course")} · {plan.kind === "assignment" ? "Due" : "On"}{" "}
-          <time dateTime={plan.due_at} title={formatDueDate(plan.due_at)}>{formatDueShort(plan.due_at, now || dueMs)}</time>
-          {now > 0 && <span className={passed ? "plan-passed" : undefined}> · {passed ? "Deadline passed" : describeDue(dueMs, now, zone)}</span>}
-        </p>
-      </div>
-      <span className="panel-note">{planSummary(plan)}</span>
-    </div>
+  return <section className="plan plan-card" aria-labelledby={labelId}>
+    <header className="plan-header">
+      <h2 id={labelId} className="plan-title">{plan.title}</h2>
+      <p className="plan-meta">
+        {formatCourseCode(plan.course_code, plan.course_name || "Course")} · {plan.kind === "assignment" ? "Due" : "On"}{" "}
+        <time dateTime={plan.due_at} title={formatDueDate(plan.due_at)}>{formatDueShort(plan.due_at, now || dueMs)}</time>
+        {now > 0 && <> · <strong className={passed ? "plan-passed" : "plan-relative"}>{passed ? "Deadline passed" : describeDue(dueMs, now, zone)}</strong></>}
+      </p>
+      <p className="plan-summary">{planSummary(plan)}</p>
+    </header>
 
-    {plan.activities.length > 0 && <ul className="work-list">
-      {plan.activities.map((step) => (
-        <li key={step.activity_id} className="work-row plan-step">
-          <div className="work-main">
-            <label className="plan-check">
-              <input type="checkbox" checked={step.done} disabled={busy} onChange={() => onToggle(step)} aria-label={`${step.title}: ${step.done ? "mark not done" : "mark done"}`} />
-              <span className={step.done ? "is-done" : undefined}>{step.title}</span>
-            </label>
-            <p className="work-meta">{formatMinutes(step.minutes)}</p>
-          </div>
-          <div className="work-due plan-when">
-            {step.start_at && step.end_at
-              ? <><span>{formatSession(step.start_at, step.end_at)}</span><button type="button" className="text-link" disabled={busy} onClick={() => onClearTime(step)}>Clear time</button></>
-              : <span className="work-relative">{step.done ? "Done" : "Not scheduled"}</span>}
-            {!step.done && <button type="button" className="text-link" disabled={busy} onClick={() => openPicker(step)} aria-label={`${step.start_at ? "Change" : "Pick"} the time for ${step.title}`}>{step.start_at ? "Change time" : "Pick time"}</button>}
-            <button type="button" className="text-link text-danger" disabled={busy} onClick={() => onRemoveStep(step)} aria-label={`Remove step ${step.title}`}>Remove</button>
-          </div>
-        </li>
-      ))}
-    </ul>}
+    {plan.activities.length > 0 && <>
+      <h3 className="plan-subhead">Steps</h3>
+      <ol className="plan-steps" role="list">
+        {plan.activities.map((step) => (
+          <li key={step.activity_id} className="plan-step">
+            <span className="plan-number" aria-hidden="true" />
+            <div className="plan-step-text">
+              <label className="plan-check">
+                <input type="checkbox" checked={step.done} disabled={busy} onChange={() => onToggle(step)} aria-label={`${step.title}: ${step.done ? "mark not done" : "mark done"}`} />
+                <span className={step.done ? "is-done" : undefined}>{step.title}</span>
+              </label>
+              <p className="plan-step-meta">{formatMinutes(step.minutes)}{step.done ? " · Done" : ""}</p>
+            </div>
+            <div className="plan-when">
+              {step.start_at && step.end_at
+                ? <span className="plan-time">{formatSession(step.start_at, step.end_at)}</span>
+                : !step.done && <span className="plan-unscheduled">Not scheduled</span>}
+              <span className="plan-links">
+                {!step.done && <button type="button" className="text-link" disabled={busy} onClick={() => openPicker(step)} aria-label={`${step.start_at ? "Change" : "Pick"} the time for ${step.title}`}>{step.start_at ? "Change time" : "Pick time"}</button>}
+                {step.start_at && <button type="button" className="text-link" disabled={busy} onClick={() => onClearTime(step)}>Clear time</button>}
+                <button type="button" className="text-link text-danger" disabled={busy} onClick={() => onRemoveStep(step)} aria-label={`Remove step ${step.title}`}>Remove</button>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </>}
 
     {picking && <form className="plan-pick" role="group" aria-label={`Choose a time for ${picking.title}`} onSubmit={(event) => { event.preventDefault(); void savePick(false); }}>
       <p><strong>When will you study “{picking.title}”?</strong> It takes {formatMinutes(picking.minutes)}.</p>
@@ -97,7 +102,7 @@ export default function StudyPlanCard({ plan, proposal, now, zone, busy, onAddSt
       </div>
       {conflicts && <div className="coverage-notice" role="alert">
         <p><strong>You already have something at this time:</strong></p>
-        <ul>{conflicts.map((item, index) => <li key={index}>{item.title} · {item.when}</li>)}</ul>
+        <ul className="plan-bullets">{conflicts.map((item, index) => <li key={index}>{item.title} · {item.when}</li>)}</ul>
         <p>Adding it anyway keeps classes and study blocks where they are, and replaces any other study session at that time.</p>
       </div>}
       {pickError && <p className="coverage-notice" role="alert">{pickError}</p>}
@@ -122,12 +127,12 @@ export default function StudyPlanCard({ plan, proposal, now, zone, busy, onAddSt
 
     {proposal && <div className="plan-proposal" role="region" aria-label="Proposed times">
       <h3>Proposed times</h3>
-      {proposal.placements.length > 0 && <ul>
+      {proposal.placements.length > 0 && <ul className="plan-bullets">
         {proposal.placements.map((placement) => <li key={placement.activity_id}><strong>{names.get(placement.activity_id)}</strong> · {formatSession(placement.start_at, placement.end_at)}</li>)}
       </ul>}
       {proposal.unplaced.length > 0 && <div className="coverage-notice" role="alert">
         <p>Not enough free time for {proposal.unplaced.length === 1 ? "one step" : `${proposal.unplaced.length} steps`}: you need {formatMinutes(proposal.needed_minutes)} and have {formatMinutes(proposal.free_minutes)} open before the deadline.</p>
-        <ul>{proposal.unplaced.map((item) => <li key={item.activity_id}>{names.get(item.activity_id)}: {item.reason}</li>)}</ul>
+        <ul className="plan-bullets">{proposal.unplaced.map((item) => <li key={item.activity_id}>{names.get(item.activity_id)}: {item.reason}</li>)}</ul>
       </div>}
       {proposal.placements.length === 0 && proposal.unplaced.length === 0 && <p className="assistant-hint">Every open step already has a time.</p>}
       <div className="plan-actions">
@@ -136,7 +141,7 @@ export default function StudyPlanCard({ plan, proposal, now, zone, busy, onAddSt
       </div>
     </div>}
 
-    <div className="plan-actions">
+    <div className="plan-actions plan-footer">
       <button type="button" className="primary-button" disabled={busy || passed || waiting === 0} onClick={onSuggest}>Suggest times</button>
       {confirming
         ? <><span className="assistant-hint">Delete this plan and its steps?</span>

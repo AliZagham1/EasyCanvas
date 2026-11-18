@@ -94,7 +94,7 @@ export default function StudyPlansPage() {
     <header className="page-header">
       <div>
         <h1 className="page-title">Study Plans</h1>
-        <p className="page-description">Break an assignment or exam into steps and find time for them. Nothing here uses AI.</p>
+        <p className="page-description">Break an assignment or exam into steps, then find time for each one.</p>
       </div>
       {plans && !creating && <button type="button" className="primary-button btn-primary" onClick={() => { setError(""); setCreating(true); }}>New plan</button>}
     </header>

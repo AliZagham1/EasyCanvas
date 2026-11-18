@@ -87,7 +87,7 @@ test("an empty list explains what to do and offers a new plan", async ({ page })
   await page.goto("/study-plans");
   await expect(page.getByRole("heading", { name: "Study Plans", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No plans yet" })).toBeVisible();
-  await expect(page.getByText("Nothing here uses AI.")).toBeVisible();
+  await expect(page.getByText(/uses AI/)).toHaveCount(0);                                 // no AI notice on this page
 });
 
 test("a plan for a Canvas assignment sends only the ids, then collects steps and times", async ({ page }) => {
