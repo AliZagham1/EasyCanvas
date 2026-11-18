@@ -113,6 +113,23 @@ export function describeDue(dueMs: number, nowMs: number, zone: string): string 
   return days === 1 ? "Due tomorrow" : `Due in ${plural(days, "day")}`;
 }
 
+/** Day number (see localDayNumber) of the Monday that starts the local week containing `ms`. */
+export function localWeekStart(ms: number, zone: string): number {
+  const day = localDayNumber(ms, zone);
+  return day - ((day + 3) % 7);            // day 0 (1970-01-01) was a Thursday, so Monday is day % 7 === 4
+}
+
+/** 0 (Monday) to 6 (Sunday) when `ms` falls in the local week that starts on `weekStart`; otherwise null. */
+export function dayIndexInWeek(ms: number, weekStart: number, zone: string): number | null {
+  const index = localDayNumber(ms, zone) - weekStart;
+  return index >= 0 && index < 7 ? index : null;
+}
+
+/** Calendar date for a day number, formatted for a week label ("Nov 16"). */
+export function formatDayNumber(day: number, options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }): string {
+  return new Date(day * 86_400_000).toLocaleDateString(undefined, { ...options, timeZone: "UTC" });
+}
+
 /** "Today", "Tomorrow" or "In 5 days" for the calendar day of a deadline, in `zone`. */
 export function describeDay(dueMs: number, nowMs: number, zone: string): string {
   const days = localDayNumber(dueMs, zone) - localDayNumber(nowMs, zone);

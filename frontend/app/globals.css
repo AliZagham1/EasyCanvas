@@ -929,3 +929,26 @@ a.priority-title:hover { text-decoration: underline; text-decoration-color: var(
 .appearance-card fieldset { margin: var(--space-3) 0 0; padding: 0; border: 0; }
 .appearance-card legend { margin-bottom: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
 @media (max-width: 767px) { .segmented label { min-height: 44px; } }
+
+/* Class Schedule: unsubmitted deadlines in a "Due" row under the day names, and a week selector. */
+.schedule-head { display: grid; grid-template-columns: 64px repeat(var(--days), minmax(0, 1fr)); font-size: 12px; line-height: 1.4; }
+.schedule-due-label { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); color: var(--muted); font-size: var(--text-xs); text-align: right; }
+.schedule-due-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 4px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); }
+.schedule-due { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--foreground); font-size: var(--text-xs); line-height: 1.5; }
+a.schedule-due:hover { background: var(--row-hover); }
+.schedule-due .course-dot { top: 0; }
+.due-time { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.due-title { min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-due-more { padding: 0 6px; color: var(--muted); font-size: var(--text-xs); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.week-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); }
+.week-nav { display: inline-flex; align-items: center; gap: var(--space-1); }
+.week-nav .btn-sm { min-width: 28px; font-size: var(--text-md); }
+.week-label { min-width: 8.5em; color: var(--foreground-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; }
+.schedule-note { margin: var(--space-2) 0 0; }
+.schedule-agenda .agenda-due { display: none; }
+@media (max-width: 720px) {
+  .schedule-head { display: none; }
+  .schedule-agenda .agenda-due { display: grid; }
+  .week-label { min-width: 0; }
+}
+.schedule-agenda li.agenda-due { background: var(--surface); border: 1px solid var(--border-strong); border-left: 3px solid var(--course-accent, var(--accent)); }

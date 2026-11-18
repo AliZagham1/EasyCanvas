@@ -46,9 +46,21 @@ agenda list on phones and for assistive technology, per-course sections with Con
 and a two-step delete. The Dashboard shows a **Next class** card computed on each course's own campus clock from confirmed
 meetings only.
 
+## Deadlines on the calendar
+The weekly view also shows **unsubmitted deadlines** in a "Due" row under the day names. They come from the same data and rules as
+Priorities (`GET /api/priorities`, `buildPriorityView`): only assignments that are incomplete, still submittable, have a due date, and
+are **not yet due**. Submitted or graded work, overdue work, excused or locked work, and work with no due date are not shown. A
+deadline sits on its local calendar day (Monday to Sunday, in the student's time zone); a day with a deadline but no class (for
+example Saturday) is added to the grid. Up to three chips per day, then "+N more" linking to Upcoming. Each chip opens the assignment in
+Canvas. The week selector moves forward up to 26 weeks (classes repeat weekly; deadlines are dated); past weeks are not shown because
+overdue work is intentionally excluded. On phones the agenda lists them under each day as "Due 11:59 PM", and on wide screens that
+list is hidden from assistive technology so the same deadline is not read twice. If Priorities data cannot be loaded, classes still
+show with a short note. This is a non-AI feature and needs no AI consent.
+
 ## Limitations
 - Only recurring weekly meetings. No holidays, exam dates, one-off changes or per-week exceptions.
 - "Next class" uses wall-clock minutes in the course's time zone, so it can be an hour off in the week of a daylight-saving change.
 - Syllabi that put the schedule in an unusual format (images, tables the extractor flattens, prose) may produce no suggestion;
   the student adds it manually.
 - Class time is not yet used by Priorities or study planning; that is the next step.
+- Deadlines are shown for the unsubmitted, not-yet-due set only; study blocks are still per course, not tied to an assignment.

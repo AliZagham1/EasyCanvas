@@ -601,7 +601,7 @@ Two-column grid: title and meta on the left, due date and relative label on the 
 
 ### Class Schedule
 
-**Implemented layout (Phase 3):** flat Next class line, the weekly grid (course colors identify blocks), then one unboxed section per course with its times as rows. `Add class time` and `Add study block` are quiet small ghost buttons; `Delete` is red text. Suggestions are tinted callouts with a muted label.
+**Implemented layout (Phase 3):** flat Next class line, the weekly grid (course colors identify blocks), then one unboxed section per course with its times as rows. `Add class time` and `Add study block` are quiet small ghost buttons; `Delete` is red text. Suggestions are tinted callouts with a muted label. Unsubmitted, not-yet-due deadlines appear in a "Due" row under the day names as small outlined chips (course dot, time, title; up to three, then "+N more"), clearly different from the filled class blocks; a week selector (previous, next, this week) pages through future weeks.
 
 
 The Class Schedule page should support:

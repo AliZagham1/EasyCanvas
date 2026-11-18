@@ -32,6 +32,8 @@ const search = [{ course_id: 1, title: 'CSE 4321', eligible_chunks: 10, indexed_
   { course_id: 2, title: 'CSE 3320', eligible_chunks: 10, indexed_chunks: 4, pending_chunks: 6, failed_chunks: 0, remaining_chunks: 6, status: 'pending', automatic: true, last_successful_at: null, documents: [] }];
 
 async function mock(page: Page, options: { priorities?: 'ok' | 'fail'; catalog?: 'ok' | 'fail' | 'empty'; detailStatus?: number } = {}) {
+  n = 0;                                    // ids restart for every test; a counter shared across tests made them depend on run order
+  const fixedAssignments = assignments();   // built once, so the ids also stay the same if the page asks twice
   await page.route('**/api/course-catalog', (route) => options.catalog === 'fail' ? route.fulfill({ status: 503, json: { detail: 'down' } })
     : route.fulfill({ json: { courses: options.catalog === 'empty' ? [] : catalog } }));
   await page.route('**/api/courses/*/details', (route) => {
@@ -40,7 +42,7 @@ async function mock(page: Page, options: { priorities?: 'ok' | 'fail'; catalog?:
     return id === 1 || id === 2 ? route.fulfill({ json: details(id) }) : route.fulfill({ status: 404, json: { detail: 'Course not found.' } });
   });
   await page.route('**/api/priorities**', (route) => options.priorities === 'fail' ? route.fulfill({ status: 502, json: { detail: 'x' } })
-    : route.fulfill({ json: { fetched_at: at(0), cached: false, courses: [{ id: 1, course_code: 'a', name: 'a' }, { id: 2, course_code: 'b', name: 'b' }], assignments: assignments(), failed_course_ids: [] } }));
+    : route.fulfill({ json: { fetched_at: at(0), cached: false, courses: [{ id: 1, course_code: 'a', name: 'a' }, { id: 2, course_code: 'b', name: 'b' }], assignments: fixedAssignments, failed_course_ids: [] } }));
   await page.route('**/api/search/status', (route) => route.fulfill({ json: { courses: search } }));
 }
 

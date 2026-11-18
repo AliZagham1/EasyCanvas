@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatCourseCode } from "@/lib/course-label";
 import { getCourseAccent } from "@/lib/coursework";
+import { buildPriorityView, dayIndexInWeek, formatDayNumber, getPriorities, localWeekStart, resolveTimeZone } from "@/lib/priorities";
+import type { PriorityItem } from "@/lib/priorities";
 import {
   KIND_LABEL, courseLabel, courseTitle, createMeeting, deleteMeeting, dismissSuggestion, formatDays, formatRange, getSchedule,
   restoreSuggestions, updateMeeting,
@@ -11,6 +14,9 @@ import type { DayCode, Meeting, MeetingInput, ScheduleCourse, ScheduleData, Sugg
 import MeetingForm from "../components/meeting-form";
 import NextClassCard from "../components/next-class-card";
 import ScheduleGrid from "../components/schedule-grid";
+import type { GridDeadline } from "../components/schedule-grid";
+
+const MAX_WEEKS_AHEAD = 26;
 
 type FormState =
   | { type: "new"; courseId: number; days?: DayCode[]; note?: string; kind?: "study" }
@@ -26,6 +32,34 @@ export default function ClassSchedulePage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  // Unsubmitted, not-yet-due assignments for the "Due" row. They come from the same Priorities data and rules as the Priorities page.
+  const [priorityItems, setPriorityItems] = useState<PriorityItem[] | null>(null);
+  const [deadlinesFailed, setDeadlinesFailed] = useState(false);
+  const [now, setNow] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const zone = useMemo(() => resolveTimeZone(), []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const clock = setTimeout(() => setNow(Date.now()), 0);
+    getPriorities({ signal: controller.signal }).then((payload) => {
+      if (!controller.signal.aborted) setPriorityItems(payload.assignments);
+    }).catch(() => { if (!controller.signal.aborted) setDeadlinesFailed(true); });   // the schedule must work without deadlines
+    return () => { controller.abort(); clearTimeout(clock); };
+  }, []);
+
+  const weekStart = now ? localWeekStart(now, zone) + 7 * weekOffset : 0;
+  const deadlines: GridDeadline[] = useMemo(() => {
+    if (!priorityItems || !now) return [];
+    const view = buildPriorityView(priorityItems, now, { courseId: "all", level: "all", showCompleted: false }, "due", zone);
+    return view.upcoming.flatMap((item) => {
+      const index = item.dueMs === null ? null : dayIndexInWeek(item.dueMs, weekStart, zone);
+      if (index === null || !item.due_at) return [];
+      return [{ key: `${item.course_id}-${item.id}`, courseId: item.course_id, course: formatCourseCode(item.course_code, item.course_name || "Course"),
+        title: item.name || "Untitled assignment", url: item.html_url, dueAt: item.due_at, dayIndex: index }];
+    });
+  }, [priorityItems, now, weekStart, zone]);
+  const weekRange = now ? `${formatDayNumber(weekStart)} – ${formatDayNumber(weekStart + 6)}` : "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,12 +144,26 @@ export default function ClassSchedulePage() {
 
           <section className="work-section" aria-labelledby="week-title">
             <div className="work-section-head">
-              <h2 id="week-title" className="section-title">This week</h2>
-              <span className="panel-note">{confirmed === 0 ? "No confirmed classes yet" : `${confirmed} confirmed class time${confirmed === 1 ? "" : "s"}`}</span>
+              <h2 id="week-title" className="section-title">{weekOffset === 0 ? "This week" : `Week of ${weekRange.split(" – ")[0]}`}</h2>
+              <div className="week-tools">
+                {weekRange && (
+                  <div className="week-nav" role="group" aria-label="Choose week">
+                    <button className="primary-button btn-ghost btn-sm" aria-label="Previous week" disabled={weekOffset === 0} onClick={() => setWeekOffset((offset) => Math.max(0, offset - 1))}>‹</button>
+                    <span className="week-label" aria-live="polite">{weekRange}</span>
+                    <button className="primary-button btn-ghost btn-sm" aria-label="Next week" disabled={weekOffset >= MAX_WEEKS_AHEAD} onClick={() => setWeekOffset((offset) => Math.min(MAX_WEEKS_AHEAD, offset + 1))}>›</button>
+                    {weekOffset > 0 && <button className="primary-button btn-ghost btn-sm" onClick={() => setWeekOffset(0)}>This week</button>}
+                  </div>
+                )}
+                <span className="panel-note">
+                  {confirmed === 0 ? "No confirmed classes yet" : `${confirmed} confirmed class time${confirmed === 1 ? "" : "s"}`}
+                  {priorityItems && ` · ${deadlines.length} deadline${deadlines.length === 1 ? "" : "s"}`}
+                </span>
+              </div>
             </div>
-            {confirmed === 0
+            {deadlinesFailed && <p className="assistant-hint schedule-note" role="status">Deadlines could not be loaded, so only class times are shown.</p>}
+            {confirmed === 0 && deadlines.length === 0
               ? <p className="list-message">Confirm a suggestion or add a class time below to see your week here.</p>
-              : <ScheduleGrid courses={courses} />}
+              : <ScheduleGrid courses={courses} deadlines={deadlines} />}
           </section>
 
           {sorted.map((course) => {

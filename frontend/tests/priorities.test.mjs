@@ -188,3 +188,19 @@ test("day labels are calendar-day distances in the given zone", () => {
   assert.equal(describeDay(now + 80 * 3_600_000, now, "America/Chicago"), "In 3 days");
   assert.equal(describeDay(now - 20 * 3_600_000, now, "America/Chicago"), "Yesterday");
 });
+
+test("the local week starts on Monday and day indexes stay inside that week", () => {
+  const { localWeekStart, dayIndexInWeek, formatDayNumber } = load();
+  const day = (iso) => Date.UTC(...iso.split("-").map((n, i) => (i === 1 ? Number(n) - 1 : Number(n)))) / 86_400_000;
+  const tuesdayNoon = Date.parse("2026-11-17T18:00:00Z");                       // Tue 12:00 in Chicago
+  const monday = localWeekStart(tuesdayNoon, CHI);
+  assert.equal(monday, day("2026-11-16"));
+  assert.equal(localWeekStart(Date.parse("2026-11-23T05:30:00Z"), CHI), monday);        // Sun 23:30 local is still that week
+  assert.equal(localWeekStart(Date.parse("2026-11-23T06:30:00Z"), CHI), monday + 7);    // Mon 00:30 local starts the next one
+  assert.equal(dayIndexInWeek(tuesdayNoon, monday, CHI), 1);
+  assert.equal(dayIndexInWeek(Date.parse("2026-11-23T05:30:00Z"), monday, CHI), 6);     // Sunday
+  assert.equal(dayIndexInWeek(Date.parse("2026-11-23T06:30:00Z"), monday, CHI), null);  // next Monday
+  assert.equal(dayIndexInWeek(Date.parse("2026-11-16T05:30:00Z"), monday, CHI), null);  // previous Sunday night
+  assert.match(formatDayNumber(monday), /Nov/);
+  assert.match(formatDayNumber(monday), /16/);
+});
