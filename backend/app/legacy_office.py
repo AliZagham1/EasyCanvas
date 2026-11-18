@@ -1,11 +1,15 @@
 """Convert legacy Office bytes locally; no Canvas, database, or AI calls."""
 
 import os
+import io
+import re
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+from zipfile import ZipFile, BadZipFile, ZIP_DEFLATED
+from xml.etree import ElementTree
 from functools import lru_cache
 from pathlib import Path
 
@@ -184,3 +188,94 @@ def convert_legacy_office(content, format_name):
             return converted.read_bytes()
     except OSError:
         raise LegacyConversionError("LegacyConverterUnavailable", "unavailable") from None
+
+
+def render_office_pdf(content, format_name):
+    """Render Office pages/slides using the same isolated, macro-disabled converter.
+
+    This does not replace native extraction. Word pagination belongs to the
+    rendered copy; presentation pages must be checked against original slides.
+    """
+    if format_name not in ("doc", "docx", "ppt", "pptx"):
+        raise ValueError("Only supported Office formats can be rendered")
+    if len(content) > MAX_LEGACY_BYTES:
+        raise LegacyConversionError("OfficeRenderFileLimit", "too_large")
+    if format_name in ("docx", "pptx"):
+        # Hyperlinks stay passive in the PDF. Linked pictures, objects and
+        # templates must not let a course file read local or remote resources.
+        try:
+            with ZipFile(io.BytesIO(content)) as archive:
+                for part in archive.infolist():
+                    if not part.filename.endswith(".rels"):
+                        continue
+                    if part.file_size > 2000000:
+                        raise LegacyConversionError("OfficeRelationshipLimit")
+                    xml = archive.read(part)
+                    if b"<!DOCTYPE" in xml.upper():
+                        raise LegacyConversionError("UnsafeOfficeRelationshipXML")
+                    for relation in ElementTree.fromstring(xml):
+                        if relation.get("TargetMode", "").casefold() == "external" and not relation.get("Type", "").endswith("/hyperlink"):
+                            raise LegacyConversionError("ExternalOfficeResourceBlocked")
+        except (BadZipFile, ElementTree.ParseError):
+            raise LegacyConversionError("InvalidOfficeRenderInput") from None
+    binary = libreoffice_binary()
+    if not binary:
+        raise LegacyConversionError("LibreOfficeNotInstalled", "unavailable")
+    try:
+        with tempfile.TemporaryDirectory(prefix="easycanvas-render-") as directory:
+            root = Path(directory).resolve()
+            source = root / f"input.{format_name}"
+            source.write_bytes(content)
+            profile, output = root / "profile", root / "output"
+            _prepare_profile(profile)
+            output.mkdir()
+            export = 'pdf:impress_pdf_Export:{"ExportHiddenSlides":{"type":"boolean","value":"true"}}' if format_name.startswith("ppt") else "pdf:writer_pdf_Export"
+            code = _run_conversion([
+                binary, f"-env:UserInstallation={profile.as_uri()}",
+                "--headless", "--nologo", "--nodefault", "--norestore",
+                "--convert-to", export, "--outdir", str(output), str(source),
+            ], root)
+            result = output / "input.pdf"
+            if code != 0 or not result.is_file() or result.stat().st_size > MAX_LEGACY_BYTES:
+                raise LegacyConversionError("OfficeRenderingFailed")
+            data = result.read_bytes()
+            if not data.startswith(b"%PDF-"):
+                raise LegacyConversionError("InvalidRenderedPDF")
+            return data
+    except OSError:
+        raise LegacyConversionError("OfficeRendererUnavailable", "unavailable") from None
+
+
+# ---------------------------------------------------------------- font normalization for re-rendering
+# When LibreOffice lacks a document's font (for example SimSun used for Latin text) it falls back to bundled fonts whose PDF text
+# layer reads "c" as "," and inserts stray letters. The page image is fine; only the extracted text is damaged. Re-rendering a
+# copy whose fonts are one common font gives a clean text layer. Symbol and monospace fonts are kept: swapping them would break
+# bullets, math and code.
+SAFE_RENDER_FONT = "Arial"
+_KEEP_FONTS = re.compile(r"symbol|wingdings|webdings|marlett|math|courier|consolas|menlo|monaco|lucida console|source code|mono|\bcode\b", re.I)
+_FONT_PARTS = re.compile(r"^word/(?:document|styles|numbering|footnotes|endnotes|comments|header\d*|footer\d*)\.xml$")
+MAX_UNZIPPED_BYTES = 150 * 1024 * 1024
+
+
+def normalize_docx_fonts(content, safe_font=SAFE_RENDER_FONT):
+    """A copy of a .docx whose text fonts are one common font, for re-rendering only. The original is never modified."""
+    if len(content) > MAX_LEGACY_BYTES:
+        raise LegacyConversionError("LegacyFileLimit", "too_large")
+    try:
+        source = ZipFile(io.BytesIO(content))
+        if sum(item.file_size for item in source.infolist()) > MAX_UNZIPPED_BYTES:
+            raise LegacyConversionError("LegacyFileLimit", "too_large")
+        output = io.BytesIO()
+        with ZipFile(output, "w", ZIP_DEFLATED) as target:
+            for item in source.infolist():
+                data = source.read(item.filename)
+                if _FONT_PARTS.match(item.filename):
+                    text = data.decode("utf-8")
+                    text = re.sub(r'w:(ascii|hAnsi|eastAsia|cs)="([^"]*)"',
+                                  lambda match: match.group(0) if _KEEP_FONTS.search(match.group(2)) else f'w:{match.group(1)}="{safe_font}"', text)
+                    text = re.sub(r'\sw:(?:ascii|hAnsi|eastAsia|cs)Theme="[^"]*"', "", text)   # a theme font would override the explicit one
+                    data = text.encode("utf-8")
+                target.writestr(item, data)
+        return output.getvalue()
+    except (BadZipFile, KeyError, UnicodeDecodeError):
+        raise LegacyConversionError("InvalidOfficeRenderInput") from None

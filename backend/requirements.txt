@@ -3,7 +3,12 @@ uvicorn==0.54.0
 filelock==4.2.4
 requests==2.34.2
 python-dotenv==1.2.4
+tzdata==2026.6
 pypdf==6.21.2
 python-docx==1.2.0
 python-pptx==1.0.2
+pypdfium2==5.14.0
+Pillow==13.0.0
 # Legacy .doc/.ppt additionally require the LibreOffice system converter.
+
+openai==3.42.0

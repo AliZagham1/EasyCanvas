@@ -45,6 +45,22 @@ def _positive_id(value):
     return None
 
 
+def source_url(record, canvas_url=None):
+    """Keep supplied links; derive only the known native syllabus route if absent."""
+    if record.get("url"):
+        return record["url"]
+    course_id = _positive_id(record.get("course_id"))
+    base_url = (canvas_service.CANVAS_URL if canvas_url is None else canvas_url) or ""
+    try:
+        base = urlparse(base_url)
+        valid = base.scheme in ("http", "https") and base.hostname and not (base.username or base.password or base.query or base.fragment)
+    except ValueError:
+        valid = False
+    if record.get("source_type") == "syllabus" and course_id and valid:
+        return f"{base_url.rstrip('/')}/courses/{course_id}/assignments/syllabus"
+    return None
+
+
 def build_file_inventory(snapshot, canvas_url=None):
     """Group file IDs by identity and retain every source that referenced them.
 
@@ -109,4 +125,58 @@ def build_file_inventory(snapshot, canvas_url=None):
             if match:
                 add(match[1], record)
 
+    return list(inventory.values())
+
+
+SYLLABUS_HOST = "oit-ead-canvas-syllabus.s3.amazonaws.com"
+
+
+def valid_syllabus_url(value, course_id, canvas_url=None):
+    """Allow only direct PDF/DOCX objects for this course on UTA's syllabus host."""
+    try:
+        parsed = urlparse(value)
+        canvas = urlparse(canvas_service.CANVAS_URL if canvas_url is None else canvas_url)
+        parts = unquote(parsed.path).split("/")
+        return bool(
+            _positive_id(course_id) and canvas.hostname
+            and parsed.scheme == "https" and parsed.netloc == SYLLABUS_HOST
+            and not (parsed.username or parsed.password or parsed.query or parsed.fragment)
+            and len(parts) == 5 and parts[1] == canvas.hostname
+            and re.fullmatch(r"\d{4}-[A-Z]+", parts[2])
+            and parts[3].startswith(f"{course_id}-")
+            and parts[4].lower().endswith((".pdf", ".docx"))
+            and not any(part in (".", "..") or "\\" in part for part in parts)
+        )
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def build_syllabus_inventory(snapshot, canvas_url=None):
+    """Discover direct syllabus documents and all their API-record provenance.
+
+    Only links present in native syllabus HTML seed this small allowlisted path.
+    Other records can add references, but never seed arbitrary external fetching.
+    """
+    course_id = snapshot["course_id"]
+    syllabus = snapshot.get("syllabus")
+    if not syllabus:
+        return []
+    inventory = {}
+    for html in record_html(syllabus):
+        parser = FileLinkParser()
+        parser.feed(html)
+        for url in parser.links:
+            if valid_syllabus_url(url, course_id, canvas_url):
+                inventory.setdefault(url, {"url": url, "references": []})
+    for record in course_records(snapshot):
+        parser = FileLinkParser()
+        for html in record_html(record):
+            parser.feed(html)
+        urls = parser.links + [record.get("url"), (record.get("metadata") or {}).get("external_url")]
+        for url in urls:
+            if url in inventory:
+                reference = {key: record.get(key) for key in ("source_type", "canvas_id", "title", "module_id", "module_name")}
+                reference.update(url=source_url(record, canvas_url), download_url=url)
+                if reference not in inventory[url]["references"]:
+                    inventory[url]["references"].append(reference)
     return list(inventory.values())

@@ -3,13 +3,14 @@
 import argparse
 import hashlib
 import json
+import logging
 import time
 from datetime import datetime, timezone
 
 import requests
 
 from backend.app import canvas_service
-from backend.app.content_discovery import HTML_FIELDS, build_file_inventory, course_records, record_html
+from backend.app.content_discovery import HTML_FIELDS, build_file_inventory, course_records, record_html, source_url
 
 
 def _normalize(record, course_id, source_type, module=None):
@@ -20,7 +21,7 @@ def _normalize(record, course_id, source_type, module=None):
         "source_type": source_type,
         "title": record.get("title") or record.get("display_name") or record.get("name"),
         # Pages use `url` for a slug; prefer their actual Canvas HTML URL.
-        "url": record.get("html_url") or record.get("url"),
+        "url": source_url({"url": record.get("html_url") or record.get("url"), "source_type": source_type, "course_id": course_id}),
         "module_id": module.get("id") if module else None,
         "module_name": module.get("name") if module else None,
         "content_id": record.get("content_id"),
@@ -169,12 +170,21 @@ def _cached_text(previous, document, force, *, content_hash=None):
     """Reuse an unchanged extraction, including known unsupported/image-only results."""
     if force or not previous:
         return None
-    attempt = previous["latest_attempt"]
+    # A fresh successful metadata check can revalidate the processed version
+    # after a temporary download failure, without downloading unchanged bytes.
+    attempt = previous if previous.get('cache_status') == 'stale_but_usable' else previous["latest_attempt"]
     same_version = document["version"] is not None and attempt.get("version") == document["version"]
     same_content = content_hash is not None and attempt.get("content_hash") == content_hash
-    if not (same_version or same_content) or attempt.get("pipeline_version") != document["pipeline_version"]:
+    same_pipeline = attempt.get('pipeline_version') == document['pipeline_version']
+    if not same_pipeline and previous.get('source_type') == 'file':
+        from backend.app.visual_document_service import same_pipeline_except_enabled, pending_visual_content
+        same_pipeline = (same_pipeline_except_enabled(attempt.get('pipeline_version'), document['pipeline_version'])
+                         and not pending_visual_content(previous))
+    if not (same_version or same_content) or not same_pipeline:
         return None
     if attempt["status"] in ("error", "unavailable", "deferred"):
+        return None
+    if attempt.get("visual_processing", {}).get("retry_needed") and attempt["visual_processing"].get("enabled"):
         return None
     if previous["stale"]:
         # Keep old readable text on disk, but never present it as the current file.
@@ -182,14 +192,17 @@ def _cached_text(previous, document, force, *, content_hash=None):
     return {**{key: value for key, value in previous.items() if key not in ("latest_attempt", "stale")}, **document}
 
 
-def ingest_course(course_id, *, store=None, max_files=None, force=False, on_progress=None):
+def ingest_course(course_id, *, store=None, max_files=None, force=False, on_progress=None, vision_provider=None):
     """Discover one course, extract supported text, and persist reusable results.
 
     Returns concise per-document outcomes and counters. Read saved text through
     IngestionStore.load_documents(readable_only=True). No binary files are saved.
     This runs explicitly, separately from the dashboard's existing requests.
+
+    The previously published course snapshot stays authoritative until this
+    sync commits: it carries a `refresh` marker while running, and keeps it as
+    failed/interrupted if the sync stops, so saved material remains available.
     """
-    from backend.app import document_service
     from backend.app.ingestion_store import IngestionStore
 
     if not isinstance(course_id, int) or isinstance(course_id, bool) or course_id <= 0:
@@ -198,14 +211,86 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
         raise ValueError("max_files must be a non-negative integer or None.")
     store = store or IngestionStore(canvas_service.get_cache_namespace())
     started = time.monotonic()
-    snapshot = sync_course(course_id, include_page_bodies=True)
-    snapshot["ingestion_status"] = "running"
-    store.save_course(snapshot)
+    # Mark the refresh before contacting Canvas: discovery is part of the sync,
+    # and answers given meanwhile should say they use the last saved material.
+    published = _begin_refresh(store, course_id)
+    snapshot = None
+    try:
+        snapshot = sync_course(course_id, include_page_bodies=True)
+        _start_processing(store, course_id, snapshot, published)
+        return _ingest_snapshot(course_id, snapshot, store, started=started, max_files=max_files, force=force,
+                                on_progress=on_progress, vision_provider=vision_provider)
+    except BaseException as error:
+        _abandon_refresh(store, course_id, snapshot, published, error)
+        raise
+
+
+def _begin_refresh(store, course_id):
+    """Mark a refresh on the published snapshot instead of replacing it early.
+
+    The marker starts in the `discovery` phase with no new generation yet, so
+    document visibility is exactly the published generation. Returns the
+    published snapshot, or None for a first sync (nothing saved to keep).
+    """
+    published = store.load_course(course_id)
+    if published and not published.get("materials_removed"):
+        marker = {"status": "running", "phase": "discovery", "synced_at": None,
+                  "started_at": datetime.now(timezone.utc).isoformat()}
+        store.save_course({**published, "refresh": marker})
+        return published
+    return None
+
+
+def _start_processing(store, course_id, snapshot, published):
+    """After discovery, attach the new generation to the marker (or start a first sync)."""
+    if published is None:
+        snapshot["ingestion_status"] = "running"
+        store.save_course(snapshot)
+        return
+    current = store.load_course(course_id) or published
+    current["refresh"] = {**(current.get("refresh") or {}), "status": "running", "phase": "processing",
+                          "synced_at": snapshot["synced_at"]}
+    store.save_course(current)
+
+
+def _abandon_refresh(store, course_id, snapshot, published, error):
+    """Record a failed/interrupted sync without hiding saved or refreshed material."""
+    status = "failed" if isinstance(error, Exception) else "interrupted"
+    try:
+        if published is not None:
+            current = store.load_course(course_id) or published
+            current["refresh"] = {**(current.get("refresh") or {}), "status": status,
+                                  "finished_at": datetime.now(timezone.utc).isoformat(), "error_type": type(error).__name__}
+        elif snapshot is not None:
+            current = {**snapshot, "ingestion_status": status, "error_type": type(error).__name__}
+        else:
+            return  # First sync failed during discovery: nothing was saved to mark.
+        store.save_course(current)
+        if status == "failed":
+            # Replacements prepared before the failure can still become searchable.
+            from backend.app.search_index_service import queue_course
+            queue_course(course_id, store=store)
+    except Exception:
+        # The original failure is still raised and reported by the caller.
+        logging.getLogger(__name__).warning("Could not record the unfinished course sync state.")
+
+
+def _ingest_snapshot(course_id, snapshot, store, *, started, max_files, force, on_progress, vision_provider):
+    """Process one discovered snapshot; called only through ingest_course()."""
+    from backend.app import document_service
+    from backend.app import visual_document_service
+    from backend.app.chunking_service import ensure_course_chunks, ensure_document_chunks
+
     statistics = {key: 0 for key in ("processed", "reused", "downloads", "downloaded_bytes", "readable", "partial", "no_text", "unsupported", "encrypted", "too_large", "unavailable", "error", "deferred")}
     outcomes = []
+    chunked_now = set()
 
     def finish(document, action):
         store.save_document(course_id, document, snapshot["synced_at"])
+        # Prepare a changed document's replacement chunks now; the retrieval
+        # view keeps any previous ready version until these are also embedded.
+        if ensure_document_chunks(course_id, store, document["document_key"])["processed"]:
+            chunked_now.add(document["document_key"])
         if action in ("reused", "extracted"):
             statistics["reused" if action == "reused" else "processed"] += 1
         status = document["status"]
@@ -239,7 +324,11 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
         elif cached is not None:
             finish(cached, "reused")
         else:
-            finish({**document, **document_service.extract_html(html)}, "extracted")
+            try:
+                extracted, action = {**document, **document_service.extract_html(html)}, "extracted"
+            except Exception as error:
+                extracted, action = _processing_failure(document, error), "failed"
+            finish(extracted, action)
 
     inventory = snapshot["file_inventory"]
     if on_progress:
@@ -268,7 +357,7 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
                 title=metadata.get("display_name") or metadata.get("filename") or document["title"],
                 updated_at=metadata.get("updated_at"), created_at=metadata.get("created_at"),
                 version=_file_version(metadata),
-                pipeline_version=document_service.file_pipeline_version(metadata),
+                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider, store=store),
                 metadata={key: value for key, value in metadata.items() if key not in ("url", "thumbnail_url")},
             )
             previous = store.load_document(course_id, document["document_key"])
@@ -295,22 +384,51 @@ def ingest_course(course_id, *, store=None, max_files=None, force=False, on_prog
                 if cached is not None:
                     document, action = {**cached, **document}, "reused"
                 else:
-                    document.update(document_service.extract_file(metadata, content))
+                    document.update(visual_document_service.extract_file(
+                        metadata, content, store=store, course_id=course_id, provider=vision_provider))
                 del content
         except (requests.RequestException, ValueError) as error:
             code = error.response.status_code if isinstance(error, requests.RequestException) and error.response is not None else None
             document.update(status="unavailable" if code in (403, 404) else "error", http_status=code, error_type=type(error).__name__, text="", pages=[])
             action = "failed"
+        except Exception as error:
+            # An unexpected extractor/converter defect affects only this file.
+            document, action = _processing_failure(document, error), "failed"
         finish(document, action)
         if on_progress:
             on_progress(f"File {index + 1}/{len(inventory)}: {document['title'] or file_id}: {document['status']} ({action})")
 
+    from backend.app.syllabus_service import ingest_syllabus_documents
+    remaining = None if max_files is None else max(0, max_files - len(inventory))
+    for document, action, downloaded in ingest_syllabus_documents(snapshot, store, force=force, max_files=remaining):
+        if downloaded:
+            statistics["downloads"] += 1
+            statistics["downloaded_bytes"] += downloaded
+        finish(document, action)
+
+    final = ensure_course_chunks(course_id, store)
+    # Report documents chunked during this sync, whether per document or in the final pass.
+    chunking = {"processed": final["processed"] + len(chunked_now),
+                "reused": max(0, final["reused"] - len(chunked_now)), "chunks": final["chunks"]}
     statistics["elapsed_seconds"] = round(time.monotonic() - started, 2)
     snapshot["ingestion_status"] = "finished"
+    snapshot.pop("refresh", None)
     snapshot["coverage"] = "partial" if any(value["status"] != "ok" for value in snapshot["source_status"].values()) or any(doc["status"] != "ok" for doc in outcomes) else "ok"
     snapshot["ingestion_statistics"] = statistics
+    snapshot["chunking_statistics"] = chunking
+    # Commit: this sync's generation becomes the published one. Documents it
+    # did not rediscover stop being current only now.
     store.save_course(snapshot)
-    return {"snapshot": snapshot, "documents": outcomes, "statistics": statistics, "database": str(store.path)}
+    store.prune_served_versions(course_id)
+    from backend.app.search_index_service import queue_course
+    queue_course(course_id, store=store)
+    return {"snapshot": snapshot, "documents": outcomes, "statistics": statistics, "chunking": chunking, "database": str(store.path)}
+
+
+def _processing_failure(document, error):
+    """Record an unexpected processing defect as a safe per-document error category."""
+    return {**document, "status": "error", "error_type": type(error).__name__,
+            "error_category": "processing_error", "http_status": None, "text": "", "pages": []}
 
 
 def format_ingestion_summary(result):
@@ -321,6 +439,7 @@ def format_ingestion_summary(result):
         f"Readable documents: {stats['readable']} ({stats['partial']} with incomplete text)",
         f"New/updated documents processed: {stats['processed']}",
         f"Reused unchanged documents: {stats['reused']}",
+        f"Document chunks: {result['chunking']['chunks']} ({result['chunking']['processed']} documents chunked; {result['chunking']['reused']} reused)",
         f"File downloads: {stats['downloads']} ({stats['downloaded_bytes']} bytes)",
         f"No text: {stats['no_text']}; unsupported: {stats['unsupported']}; encrypted: {stats['encrypted']}; too large: {stats['too_large']}",
         f"Unavailable documents: {stats['unavailable']}; errors: {stats['error']}; deferred: {stats['deferred']}",
@@ -328,6 +447,79 @@ def format_ingestion_summary(result):
         f"Local database: {result['database']}",
     ))
     return "\n".join(lines)
+
+
+def enrich_saved_course(course_id, *, store=None, vision_provider=None, document_keys=None, on_progress=None):
+    """Backfill pending visuals in saved files through the same extraction pipeline.
+
+    Does not rediscover courses, modify native syllabus records, or force unchanged
+    chunks/embeddings to rebuild. Individual metadata still verifies access and
+    remote freshness before a Canvas file is downloaded. Existing external syllabus
+    file references reuse their allowlisted downloader. Embedding indexing stays explicit.
+    """
+    from backend.app import visual_document_service
+    from backend.app.chunking_service import ensure_course_chunks
+    from backend.app.ingestion_store import IngestionStore
+
+    if type(course_id) is not int or course_id <= 0:
+        raise ValueError("course_id must be a positive integer")
+    store = store or IngestionStore(canvas_service.get_cache_namespace())
+    snapshot = store.load_course(course_id)
+    if not snapshot:
+        raise ValueError("Ingest this course before enriching saved files")
+    report = {"course_id": course_id, "processed": 0, "reused": 0, "downloads": 0, "documents": []}
+    keys = set(document_keys or [])
+    for previous in store.load_documents(course_id):
+        if previous["source_type"] not in ('file', 'syllabus_file') or keys and previous["document_key"] not in keys:
+            continue
+        metadata = previous.get('metadata') or {'filename': previous.get('title') or ''}
+        if previous.get("format") not in visual_document_service.SUPPORTED:
+            continue
+        if not visual_document_service.pending_visual_content(previous):
+            report["reused"] += 1
+            continue
+        pipeline = visual_document_service.file_pipeline_version(metadata, vision_provider, store=store)
+        document = {key: previous.get(key) for key in ('document_key', 'canvas_id', 'course_id', 'source_type', 'title', 'url', 'references', 'created_at', 'updated_at', 'version', 'source_role', 'http_validators')}
+        document["pipeline_version"] = pipeline
+        try:
+            if previous['source_type'] == 'syllabus_file':
+                # Reuse the existing allowlisted downloader; discovery/security are unchanged.
+                from backend.app.syllabus_service import fetch_syllabus
+                content, validators = fetch_syllabus(previous['url'], course_id)
+                document.update(http_validators=validators, metadata=metadata,
+                                version=hashlib.sha256(content).hexdigest(),
+                                pipeline_version=previous['pipeline_version'], visual_pipeline_version=pipeline)
+            else:
+                metadata = canvas_service.get_file_info(course_id, previous['canvas_id'])
+                if str(metadata.get('id')) != str(previous['canvas_id']):
+                    raise ValueError('Canvas returned a different file ID')
+                document.update(title=metadata.get('display_name') or metadata.get('filename') or document['title'],
+                                metadata={k: v for k, v in metadata.items() if k not in ('url', 'thumbnail_url')},
+                                updated_at=metadata.get('updated_at'), version=_file_version(metadata),
+                                pipeline_version=visual_document_service.file_pipeline_version(metadata, vision_provider, store=store))
+                if metadata.get('locked_for_user'):
+                    document.update(status='unavailable', error_type='LockedForUser', text='', pages=[])
+                    content = None
+                else:
+                    _, content = canvas_service.download_canvas_file(course_id, previous['canvas_id'], metadata=metadata)
+            if content is not None:
+                report["downloads"] += 1
+                document.update(visual_document_service.extract_file(metadata, content, store=store,
+                                                                    course_id=course_id, provider=vision_provider))
+        except (requests.RequestException, ValueError) as error:
+            code = error.response.status_code if isinstance(error, requests.RequestException) and error.response is not None else None
+            document.update(status="unavailable" if code in (401, 403, 404, 410) else "error",
+                            http_status=code, error_type=type(error).__name__, text="", pages=[])
+        except Exception as error:
+            document = _processing_failure(document, error)
+        store.save_document(course_id, document, snapshot["synced_at"])
+        outcome = {key: document.get(key) for key in ("document_key", "title", "status", "character_count", "visual_processing", "error_type")}
+        report["documents"].append(outcome)
+        report["processed"] += 1
+        if on_progress:
+            on_progress(f"{document['title']}: {document['status']}")
+    report["chunking"] = ensure_course_chunks(course_id, store)
+    return report
 
 
 def ingest_current_courses(*, store=None, on_update=None, force=False):
@@ -343,6 +535,7 @@ def ingest_current_courses(*, store=None, on_update=None, force=False):
     results = [{
         "course_id": course["id"], "course_code": course.get("course_code"),
         "name": course.get("name"), "enrollment_term_id": course.get("enrollment_term_id"),
+        "term": course.get("term"),
         "status": "pending", "coverage": None, "statistics": {},
     } for course in courses]
 
@@ -358,6 +551,10 @@ def ingest_current_courses(*, store=None, on_update=None, force=False):
         publish()
         try:
             report = ingest_course(course["course_id"], store=store, force=force)
+            if isinstance(course.get("term"), dict):
+                # Keep the same Canvas term dates used to select current courses.
+                report["snapshot"].setdefault("course", {}).setdefault("metadata", {})["term"] = course["term"]
+                store.save_course(report["snapshot"])
             course.update(status="completed", coverage=report["snapshot"]["coverage"], statistics=report["statistics"])
         except Exception as error:
             # Exceptions can contain signed URLs. Store categories, never their
@@ -381,14 +578,33 @@ if __name__ == "__main__":
     parser.add_argument("--ingest", action="store_true", help="Extract supported documents and save them locally.")
     parser.add_argument("--max-files", type=int, help="Limit file processing for a small first test; requires --ingest.")
     parser.add_argument("--force", action="store_true", help="Reprocess unchanged documents; requires --ingest.")
+    parser.add_argument("--enrich-saved", action="store_true", help="Inspect/enrich saved Canvas files without course rediscovery; enable paid Vision explicitly in the environment.")
+    parser.add_argument("--document-key", action="append", help="Limit --enrich-saved to selected saved file keys; may be repeated.")
     args = parser.parse_args()
     if (args.course_id is None) == (not args.all_current):
         parser.error("Provide either a course_id or --all-current.")
-    if args.all_current and (not args.ingest or args.max_files is not None):
+    if args.enrich_saved and (args.ingest or args.force or args.max_files is not None):
+        parser.error("--enrich-saved cannot be combined with --ingest, --force or --max-files")
+    if args.document_key and not args.enrich_saved:
+        parser.error("--document-key requires --enrich-saved")
+    if args.all_current and (not (args.ingest or args.enrich_saved) or args.max_files is not None):
         parser.error("--all-current requires --ingest and cannot be limited with --max-files.")
     if not args.ingest and (args.max_files is not None or args.force):
         parser.error("--max-files and --force require --ingest")
     try:
+        if args.enrich_saved:
+            from backend.app.ingestion_store import IngestionStore
+            store = IngestionStore(canvas_service.get_cache_namespace())
+            ids = store.saved_current_course_ids() if args.all_current else [args.course_id]
+            if not ids:
+                parser.exit(1, "No saved current courses. Run normal ingestion first.\n")
+            failed = False
+            for course_id in ids:
+                result = enrich_saved_course(course_id, store=store, document_keys=args.document_key, on_progress=print)
+                print(json.dumps({key: value for key, value in result.items() if key != "documents"}))
+                failed = failed or any(doc["status"] in ("error", "unavailable") or (doc.get("visual_processing") or {}).get("failed", 0)
+                                       for doc in result["documents"])
+            parser.exit(2 if failed else 0)
         if args.all_current:
             def progress(courses):
                 for course in courses:

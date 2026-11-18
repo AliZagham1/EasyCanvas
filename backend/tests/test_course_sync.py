@@ -18,6 +18,15 @@ def course(course_id):
 
 
 class CurrentCoursesTests(unittest.TestCase):
+    def test_current_course_sync_preserves_canvas_term_dates_for_later_cleanup(self):
+        store = Mock()
+        term = {'id': 9, 'name': 'Test semester', 'start_at': '2030-01-01T00:00:00Z', 'end_at': '2030-05-01T00:00:00Z'}
+        snapshot = {'course_id': 1, 'course': {'metadata': {}}, 'coverage': 'ok'}
+        with patch.object(canvas_service, 'get_current_courses', return_value=[{**course(1), 'term': term}]), \
+             patch.object(ingestion_service, 'ingest_course', return_value={'snapshot': snapshot, 'statistics': {}}):
+            ingestion_service.ingest_current_courses(store=store)
+        self.assertEqual(store.save_course.call_args.args[0]['course']['metadata']['term'], term)
+
     def test_all_unique_current_courses_are_ingested_and_a_failure_does_not_stop_others(self):
         store = Mock()
         def ingest(course_id, **kwargs):
@@ -230,3 +239,6 @@ class SyncApiTests(unittest.TestCase):
                 self.assertEqual((await self.request(main.app, "POST", "/api/ingestion/sync"))[0], 503)
         with patch.object(main, "CourseSyncService", side_effect=ValueError("missing config")):
             asyncio.run(run())
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

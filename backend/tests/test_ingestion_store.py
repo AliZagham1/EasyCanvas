@@ -61,3 +61,6 @@ class IngestionStoreTests(unittest.TestCase):
     def test_empty_and_missing_course(self):
         self.assertEqual(self.store.load_documents(42), [])
         self.assertEqual(self.store.load_documents(999), [])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

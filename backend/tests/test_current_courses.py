@@ -97,3 +97,6 @@ class CurrentCourseSelectionTests(unittest.TestCase):
         with patch.object(canvas_service, "_get_student_courses", side_effect=error):
             with self.assertRaises(canvas_service.requests.ConnectionError):
                 canvas_service.get_current_courses()
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

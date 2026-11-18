@@ -50,6 +50,13 @@ The following behavior is currently implemented in the committed repository:
 6. Filtering of upcoming assignments to include only future, unsubmitted work.
 7. Sorting assignments by due date.
 8. A simple development script for testing assignment retrieval against Canvas.
+9. Priorities (`/priorities`, `GET /api/priorities`): deterministic, deadline-based view of current-course
+   assignments. Canvas facts come from `backend/app/priority_service.py`; classification and sorting are
+   `frontend/lib/priorities.ts`. See `docs/specs/priorities.md`. It uses no LLM and does no grade calculation.
+10. Class Schedule (`/class-schedule`, `/api/schedule`): confirmed meeting times with rules-based syllabus suggestions that the
+    student must confirm; manual entry always works. See `docs/specs/class-schedule.md`.
+11. Courses (`/courses`, `/courses/[courseId]`, `/api/course-catalog`, `/api/courses/{id}/details`): a per-course home page built from
+    saved data plus Priorities. See `docs/specs/courses.md`.
 
 Do not assume that course-content ingestion, file processing, RAG, priority scoring, study-plan generation, class-schedule extraction, or AI-agent functionality is implemented unless the relevant code exists in the current working tree.
 
@@ -64,6 +71,11 @@ It reuses the dashboard's current-course selection and keeps ingestion in a
 separate worker process. Legacy DOC/PPT use a local LibreOffice converter; converted Word
 structure remains explicitly unverified. OCR, other document formats, RAG, and AI
 assistant functionality are not implemented by this ingestion step.
+
+12. Global AI consent (`/api/ai-consent`, `backend/app/consent_service.py`): AI features are off until the student agrees in the
+    first-visit modal or Settings -> AI & Privacy. Every external AI call checks consent server-side; unknown means denied.
+    Non-AI features and Canvas Sync never depend on it. New AI call paths must call `consent_service.require_ai_consent(store)`
+    immediately before the request. See `docs/specs/ai-consent.md`.
 
 ## Current Development Priorities
 
@@ -377,6 +389,11 @@ Avoid making the browser directly responsible for orchestrating many Canvas API 
 ---
 
 ## Testing Expectations
+
+Before fixing a production/demo regression, read `docs/STABILITY_LOG.md`.
+Check for an existing related issue and explain why its invariant or regression
+test did not prevent recurrence. Record meaningful bugs there; mark Fixed only
+after regression tests and a real scenario replay succeed.
 
 Every important behavior change should be verified.
 
