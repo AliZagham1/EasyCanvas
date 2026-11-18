@@ -148,7 +148,9 @@ test("insufficient, structured-data and indexing outcomes",async ({page})=>{
   for(const value of ["insufficient_context","needs_structured_data","indexing_needed"]){
     status=value;await question(page,"Question "+value);
     const turn=page.locator(".conversation-turn").last();
-    await expect(turn.locator(".conversation-assistant > p").first()).toBeVisible();
+    // Assert on the settled answer, not the transient "Searching..." paragraph, which the mocked instant reply can replace first.
+    await expect(turn.locator(".conversation-assistant")).toContainText("Four warnings");
+    await expect(turn.locator(".conversation-assistant")).not.toContainText("Searching course material");
     await expect(turn.locator(".conversation-sources")).toHaveCount(0);
   }
 });

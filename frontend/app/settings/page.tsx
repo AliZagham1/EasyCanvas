@@ -6,6 +6,7 @@ import type { StoragePreview } from "@/lib/storage";
 import OpenAIKeyCard from "../components/openai-key-card";
 import SearchSettings from "../components/search-settings";
 import AIPrivacyCard from "../components/ai-privacy-card";
+import ThemeCard from "../components/theme-card";
 
 export default function SettingsPage() {
   const [preview, setPreview] = useState<StoragePreview | null>(null);
@@ -79,6 +80,8 @@ export default function SettingsPage() {
       <h1 className="page-title">Settings</h1>
       <p className="page-description">Manage course search, API usage, and the materials saved on this computer.</p>
     </div></header>
+    <div className="settings-sections">
+    <ThemeCard />
     <AIPrivacyCard />
     <OpenAIKeyCard />
     <SearchSettings />
@@ -119,6 +122,7 @@ export default function SettingsPage() {
       </p><button type="button" className="primary-button conversation-action-danger" disabled={!chosen.length || pending}
         onClick={() => { setError(""); setConfirming(true); }}>Delete selected materials</button></div>}
     </section>
+    </div>
     <dialog ref={dialog} className="conversation-dialog" aria-labelledby="cleanup-title" aria-describedby="cleanup-description"
       onCancel={event => { event.preventDefault(); if (!pending) setConfirming(false); }}
       onKeyDown={event => {

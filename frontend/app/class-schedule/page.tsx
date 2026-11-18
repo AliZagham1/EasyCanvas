@@ -108,8 +108,8 @@ export default function ClassSchedulePage() {
           {notice && <p className="assistant-hint search-save-status" role="status">{notice}</p>}
           {formError && !form && <p className="coverage-notice" role="alert">{formError}</p>}
 
-          <section className="coursework-panel" aria-labelledby="week-title">
-            <div className="panel-header">
+          <section className="work-section" aria-labelledby="week-title">
+            <div className="work-section-head">
               <h2 id="week-title" className="section-title">This week</h2>
               <span className="panel-note">{confirmed === 0 ? "No confirmed classes yet" : `${confirmed} confirmed class time${confirmed === 1 ? "" : "s"}`}</span>
             </div>
@@ -123,12 +123,12 @@ export default function ClassSchedulePage() {
             const empty = course.meetings.length === 0 && course.suggestions.length === 0 && course.hints.length === 0;
             const labelId = `course-${course.course_id}`;
             return (
-              <section key={course.course_id} className={`coursework-panel schedule-course ${getCourseAccent(course.course_id)}`} aria-labelledby={labelId}>
-                <div className="panel-header">
+              <section key={course.course_id} className={`work-section schedule-course ${getCourseAccent(course.course_id)}`} aria-labelledby={labelId}>
+                <div className="work-section-head">
                   <h2 id={labelId} className="section-title">{courseLabel(course)} <span className="priority-count">{courseTitle(course.name)}</span></h2>
                   <div className="meeting-buttons">
-                    <button className="primary-button" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
-                    <button className="primary-button" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id, kind: "study" }); }}>Add study block</button>
+                    <button className="primary-button btn-ghost btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
+                    <button className="primary-button btn-ghost btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id, kind: "study" }); }}>Add study block</button>
                   </div>
                 </div>
 
@@ -152,7 +152,7 @@ export default function ClassSchedulePage() {
                         ) : (
                           <>
                             <button className="text-link" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "edit", courseId: course.course_id, meeting }); }}>Edit</button>
-                            <button className="text-link" disabled={busy} onClick={() => setConfirmDelete(meeting.meeting_id)}>Delete</button>
+                            <button className="text-link text-danger" disabled={busy} onClick={() => setConfirmDelete(meeting.meeting_id)}>Delete</button>
                           </>
                         )}
                       </div>

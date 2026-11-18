@@ -84,6 +84,20 @@ export function formatDueShort(dueAt: string | null | undefined, nowMs: number =
   return `${day} · ${time}`;
 }
 
+/** Time of day only ("11:59 PM"), for rows already grouped under a date heading. */
+export function formatDueTime(dueAt: string | null | undefined) {
+  if (!dueAt || Number.isNaN(new Date(dueAt).getTime())) return "Due date unavailable";
+  return new Date(dueAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+/** Date heading for a group of deadlines ("Thursday, Nov 19"; the year only when it is not the current one). */
+export function formatDayHeading(dueAt: string | null | undefined, nowMs: number = Date.now()) {
+  if (!dueAt || Number.isNaN(new Date(dueAt).getTime())) return "Due date unavailable";
+  const due = new Date(dueAt);
+  const sameYear = due.getFullYear() === new Date(nowMs).getFullYear();
+  return due.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
 /** Course identity, rather than list position, selects an existing palette accent. */
 export function getCourseAccent(courseId: number) {
   const accents = ["course-accent-violet", "course-accent-blue", "course-accent-green", "course-accent-amber"];

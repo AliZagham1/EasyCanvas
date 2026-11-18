@@ -132,6 +132,18 @@ test("compact due dates drop the zone, keep the time, and show the year only whe
   assert.equal(formatDueShort("invalid", now), "Due date unavailable");
 });
 
+test("time-only and day-heading formats support rows grouped by date", () => {
+  const { formatDueTime, formatDayHeading } = loadCoursework();
+  const now = Date.parse("2026-11-18T12:00:00Z");
+  assert.match(formatDueTime("2026-11-19T17:30:00Z"), /\d+:30/);
+  assert.doesNotMatch(formatDueTime("2026-11-19T17:30:00Z"), /Nov|2026/);
+  assert.match(formatDayHeading("2026-11-19T17:30:00Z", now), /Nov/);
+  assert.doesNotMatch(formatDayHeading("2026-11-19T17:30:00Z", now), /2026/);
+  assert.match(formatDayHeading("2027-01-05T17:30:00Z", now), /2027/);
+  assert.equal(formatDueTime("nope"), "Due date unavailable");
+  assert.equal(formatDayHeading(null, now), "Due date unavailable");
+});
+
 test("course accents do not change when courses reorder or new courses are added", () => {
   const { getCourseAccent } = loadCoursework();
   const original = new Map(courses.map((course) => [course.id, getCourseAccent(course.id)]));

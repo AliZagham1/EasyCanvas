@@ -118,7 +118,7 @@ function CourseView() {
           <p className="course-meta">Last synced {formatSynced(details.synced_at)}{searchLabel ? ` · ${searchLabel}` : ""}</p>
         </div>
         <div className="header-actions">
-          <Link href={`/study-assistant?course=${details.course_id}`} className="primary-button button-link">Ask the Study Assistant</Link>
+          <Link href={`/study-assistant?course=${details.course_id}`} className="primary-button btn-primary button-link">Ask the Study Assistant</Link>
           {details.canvas_url && <a href={details.canvas_url} target="_blank" rel="noopener noreferrer" className="primary-button button-link">Open in Canvas<span className="sr-only"> (opens in a new tab)</span></a>}
           {details.syllabus_url && <a href={details.syllabus_url} target="_blank" rel="noopener noreferrer" className="primary-button button-link">Syllabus<span className="sr-only"> (opens in Canvas)</span></a>}
         </div>
@@ -135,8 +135,8 @@ function CourseView() {
         ))}
       </dl>
 
-      <section className="coursework-panel" aria-labelledby="course-assignments">
-        <div className="panel-header">
+      <section className="work-section" aria-labelledby="course-assignments">
+        <div className="work-section-head">
           <h2 id="course-assignments" className="section-title">Assignments</h2>
           {!assignmentsFailed && hiddenCount > 0 && (
             <label className="priority-check"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />Show completed and closed ({hiddenCount + view.notActionable.length})</label>
@@ -159,8 +159,8 @@ function CourseView() {
         ))}
       </section>
 
-      <section className="coursework-panel" aria-labelledby="course-times">
-        <div className="panel-header">
+      <section className="work-section" aria-labelledby="course-times">
+        <div className="work-section-head">
           <h2 id="course-times" className="section-title">Class times</h2>
           <Link href="/class-schedule" className="text-link">Manage in Class Schedule</Link>
         </div>
@@ -173,8 +173,8 @@ function CourseView() {
               </li>))}</ul>}
       </section>
 
-      <section className="coursework-panel" aria-labelledby="course-news">
-        <div className="panel-header">
+      <section className="work-section" aria-labelledby="course-news">
+        <div className="work-section-head">
           <h2 id="course-news" className="section-title">Announcements <span className="priority-count">{details.counts.announcements}</span></h2>
           <span className="panel-note">{details.counts.announcements > details.announcements.length ? `Latest ${details.announcements.length} of ${details.counts.announcements}` : "Newest first"}</span>
         </div>
@@ -199,8 +199,8 @@ function CourseView() {
         )}
       </section>
 
-      <section className="coursework-panel" aria-labelledby="course-materials">
-        <div className="panel-header">
+      <section className="work-section" aria-labelledby="course-materials">
+        <div className="work-section-head">
           <h2 id="course-materials" className="section-title">Materials</h2>
           <span className="panel-note">{materialsSummary(details.counts)}</span>
         </div>
@@ -213,7 +213,7 @@ function CourseView() {
                 {module.items.length === 0 ? <p className="assistant-hint">No files or pages saved for this module.</p> : (
                   <ul>{module.items.map((item, index) => (
                     <li key={`${item.title}-${index}`}>
-                      <span className="priority-badge priority-low">{item.type}</span>
+                      <span className="module-type">{item.type}</span>
                       {item.url ? <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}<span className="sr-only"> (opens in Canvas)</span></a> : <span>{item.title}</span>}
                     </li>))}
                   </ul>

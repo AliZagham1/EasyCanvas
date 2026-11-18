@@ -179,3 +179,12 @@ test("urgency groups use the same 24 hour and 72 hour limits as the priority lev
   assert.equal(urgencyBucket(hours(72.1), now), "later");
   assert.equal(urgencyBucket(hours(-2), now), "soon");   // a deadline that just passed is still the most urgent group
 });
+
+test("day labels are calendar-day distances in the given zone", () => {
+  const { describeDay } = load();
+  const now = Date.parse("2026-11-17T18:00:00Z");              // 12:00 in Chicago
+  assert.equal(describeDay(now + 3 * 3_600_000, now, "America/Chicago"), "Today");
+  assert.equal(describeDay(now + 14 * 3_600_000, now, "America/Chicago"), "Tomorrow");   // 02:00 next local day
+  assert.equal(describeDay(now + 80 * 3_600_000, now, "America/Chicago"), "In 3 days");
+  assert.equal(describeDay(now - 20 * 3_600_000, now, "America/Chicago"), "Yesterday");
+});

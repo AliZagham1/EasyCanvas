@@ -79,11 +79,11 @@ This file records the approved visual system (light theme). `PRODUCT.md` and `AG
 - Small, disciplined type: page titles are 20px, not display-sized.
 - Compact rows (about 40px) and a 4px spacing grid.
 - Semantic tables with explicit data states.
-- Dark mode is deliberately deferred.
+- A first-class dark theme that follows the system or the student's Settings choice.
 
 ### Rollout status
 
-The visual system is being applied incrementally. **Phase 1 (done):** tokens, type scale, buttons, page headers, desktop sidebar and mobile navigation. **Phase 2 (done):** Dashboard and Priorities layouts and the shared row pattern. **Next:** Upcoming, Courses, Class Schedule, Study Assistant and Settings. The page-specific sections further down (Courses, Upcoming, Class Schedule, Study Assistant) still describe the earlier page layouts and will be revised as each page is redesigned; where they conflict with the foundation rules above and below, the foundation rules win.
+The visual system is being applied incrementally. **Phase 1 (done):** tokens, type scale, buttons, page headers, desktop sidebar and mobile navigation. **Phase 2 (done):** Dashboard and Priorities layouts and the shared row pattern. **Phase 3 (done):** Upcoming, Courses (index and course page), Class Schedule, Study Assistant toolbar and Settings. **Dark mode (done):** System / Light / Dark. The page-specific sections further down describe product intent; the "Implemented layout" notes in them record what each page looks like now. Where an older sentence conflicts with the foundation rules above and below, the foundation rules win.
 
 ### Purpose
 
@@ -129,6 +129,24 @@ Indigo (`accent`, `#4f46e5`) is used for exactly three things: the one filled pr
 ### Neutral
 
 `background` and `surface` are white. `sidebar`, `table-heading` and `row-hover` are barely tinted greys. `foreground` carries primary text, `foreground-secondary` navigation and secondary controls, `muted` supporting text (6.1:1 on white). `border` (hairline) divides panels, rows and regions; `border-strong` outlines buttons; `control-border` outlines form controls and meets 3:1 against white (WCAG 1.4.11). Hover colors are quiet local state changes.
+
+### Dark theme
+
+Dark is a full theme, not an inversion. It follows `prefers-color-scheme` unless Settings -> Appearance sets Light or Dark, which is saved in this browser only (`localStorage` key `easycanvas-theme`) and applied by a tiny script in `<head>` before first paint (`data-theme` on `<html>`), so there is no flash. Every color lives in a CSS variable; never hard-code a hex in a rule.
+
+| Token | Light | Dark |
+|---|---|---|
+| `background` / `surface` | `#ffffff` / `#ffffff` | `#0f1115` / `#15181e` |
+| `sidebar` | `#fafafb` | `#0c0e11` |
+| `foreground` / `foreground-secondary` / `muted` | `#16181d` / `#3f4452` / `#5b6270` | `#eceef2` / `#c4c8d0` / `#9aa1ad` |
+| `border` / `border-strong` / `control-border` | `#e6e7ec` / `#cdd0d9` / `#858a99` | `#272b33` / `#3a3f4a` / `#6b7280` |
+| `accent` (focus, marks) | `#4f46e5` | `#8b93f8` |
+| `accent-solid` (filled button, switch) with `on-accent` text | `#4f46e5` + white | `#5457d6` + white |
+| `accent-soft` / `accent-text` (active nav) | `#eef0ff` / `#4338ca` | `#1e2140` / `#c3c8ff` |
+| `danger` (text) / `danger-solid` (button) | `#b42318` / `#b42318` | `#ff8a80` / `#b42318` |
+| `warning` (due soon) | `#8a5300` | `#e3a53b` |
+
+Rules: filled buttons use the `*-solid` tokens with `on-accent` text, because the light accent used for focus rings is too pale to carry white text. Text on tinted fills uses `accent-text`. Course identity colors and the teal study color are shared by both themes; the study color has its own readable text variant (`study-text`). Both themes must keep text at 4.5:1 or better (3:1 for large text) and control borders at 3:1; this is checked with an automated audit in light and dark.
 
 ### Semantic
 
@@ -526,6 +544,9 @@ Avoid decorative dashboard widgets with no clear student value.
 
 ### Courses
 
+**Implemented layout (Phase 3):** the index is a list of rows, not cards: a course dot, the code and cleaned name, `materials` counts, the next class, and the workload (`1 overdue`, `1 due in the next 3 days`, `Nothing due`). Study Assistant readiness appears only when something is pending. The course page uses the same unboxed sections and `.work-row` assignment rows as Priorities, with `Ask the Study Assistant` as its one primary button.
+
+
 Courses should provide a clear entry into course-specific context.
 
 A course page may eventually include:
@@ -542,6 +563,9 @@ When the student enters a course, the active course should remain obvious.
 Course pages should not feel like unrelated mini-apps.
 
 ### Upcoming
+
+**Implemented layout (Phase 3):** one chronological list grouped under a heading per calendar day (`Thursday, Nov 19 · Tomorrow`). A row shows the title, `course · points` and the time of day; the full date and zone are in the tooltip. Missing points read "Points unavailable". Upcoming stays a chronological view; Priorities owns urgency and status.
+
 
 Upcoming should be optimized for scanning.
 
@@ -571,9 +595,14 @@ Rules:
 
 ### Shared row pattern (`.work-row`)
 
+
+
 Two-column grid: title and meta on the left, due date and relative label on the right, hairline between rows, 8px/12px padding, hover fill. On phones it stacks to title, meta, then date and relative text on one line. Use it for any list of assignments; do not wrap it in a card.
 
 ### Class Schedule
+
+**Implemented layout (Phase 3):** flat Next class line, the weekly grid (course colors identify blocks), then one unboxed section per course with its times as rows. `Add class time` and `Add study block` are quiet small ghost buttons; `Delete` is red text. Suggestions are tinted callouts with a muted label.
+
 
 The Class Schedule page should support:
 
@@ -597,6 +626,9 @@ If no schedule is found, manual entry must be obvious.
 The schedule should eventually act as fixed unavailable time for study planning.
 
 ### Study Assistant
+
+**Implemented layout (Phase 3):** the course and conversation selectors, Rename and Delete share one toolbar row, and readiness is one muted line, so the conversation gets the height. On phones the selector labels stay available to assistive technology but are visually hidden, and the header drops its description. `Send` is the one primary button; the disabled screen uses a primary `Enable AI Features` button.
+
 
 The Study Assistant should look like EasyCanvas, not a ChatGPT clone.
 
@@ -684,6 +716,10 @@ Uses:
 - estimated effort
 
 The interfaces may differ, but the product should feel like one coherent system.
+
+### Settings
+
+One column, at most 880px wide, of sections separated by a hairline and 24px of space: AI & Privacy, OpenAI API key, Study Assistant search (with the API usage summary under it, unboxed) and Course storage. Every section has a 16px title, a 13px muted description and its controls at the same width. Only the Course storage table keeps a bordered table. Withdrawal and storage text must keep saying what is and is not deleted.
 
 ### Dialogs and Modals
 

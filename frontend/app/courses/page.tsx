@@ -52,7 +52,7 @@ export default function CoursesPage() {
       <header className="page-header">
         <div>
           <h1 className="page-title">Courses</h1>
-          <p className="page-description">Everything for each course in one place: what is due, your class times, announcements and materials.</p>
+          <p className="page-description">What is due, your class times, announcements and materials, per course.</p>
         </div>
       </header>
 
@@ -72,6 +72,7 @@ export default function CoursesPage() {
             return (
               <li key={course.course_id}>
                 <Link href={`/courses/${course.course_id}`} className={`course-card ${getCourseAccent(course.course_id)}`}>
+                  <span className="course-dot" aria-hidden="true" />
                   <span className="course-card-code">{formatCourseCode(course.course_code, course.name || "Course")}</span>
                   <span className="course-card-title">{courseTitle(course.name)}</span>
                   <span className="course-card-next">
@@ -82,7 +83,7 @@ export default function CoursesPage() {
                   <span className={`course-card-work course-work-${workload?.tone ?? "unknown"}`}>{workload ? workload.text : "Assignment status unavailable"}</span>
                   <span className="course-card-foot">
                     <span>{materialsSummary(course.counts)}</span>
-                    {status && <span className="course-card-search">{compactSearchStatus(status) === "Ready" ? "Study Assistant ready" : compactSearchStatus(status)}</span>}
+                    {status && compactSearchStatus(status) !== "Ready" && <span className="course-card-search">{compactSearchStatus(status)}</span>}
                   </span>
                 </Link>
               </li>

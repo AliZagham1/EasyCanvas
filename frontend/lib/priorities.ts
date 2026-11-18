@@ -113,6 +113,15 @@ export function describeDue(dueMs: number, nowMs: number, zone: string): string 
   return days === 1 ? "Due tomorrow" : `Due in ${plural(days, "day")}`;
 }
 
+/** "Today", "Tomorrow" or "In 5 days" for the calendar day of a deadline, in `zone`. */
+export function describeDay(dueMs: number, nowMs: number, zone: string): string {
+  const days = localDayNumber(dueMs, zone) - localDayNumber(nowMs, zone);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  return days > 1 ? `In ${days} days` : `${-days} days ago`;
+}
+
 /** Which urgency group a still-open deadline falls into, using the same 24h / 72h limits as the Priorities levels. */
 export function urgencyBucket(dueMs: number, nowMs: number): "soon" | "next" | "later" {
   const hours = (dueMs - nowMs) / 3_600_000;

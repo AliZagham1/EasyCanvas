@@ -59,7 +59,7 @@ test('the Courses page shows one card per course with next class, workload and r
   await expect(cards.nth(1)).toContainText('Starts in 2 h');
   await expect(cards.nth(1)).toContainText('1 overdue · 1 due in the next 3 days');
   await expect(cards.nth(1)).toContainText('2 modules · 5 files · 6 announcements');
-  await expect(cards.nth(1)).toContainText('Study Assistant ready');
+  await expect(cards.nth(1)).not.toContainText('Study Assistant ready');   // readiness is shown only when something is pending
   await expect(cards.nth(1)).toHaveAttribute('href', '/courses/1');
 });
 
