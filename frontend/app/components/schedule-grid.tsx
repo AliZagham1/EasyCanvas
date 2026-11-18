@@ -7,7 +7,11 @@ const HOUR_PX = 52;
 const MAX_CHIPS = 3;
 
 /** An unsubmitted, not-yet-due assignment placed on a day of the week being shown. */
-export type GridDeadline = { key: string; courseId: number; course: string; title: string; url: string | null; dueAt: string; dayIndex: number };
+export type GridDeadline = {
+  key: string; courseId: number; course: string; title: string; url: string | null; dueAt: string; dayIndex: number;
+  /** "exam" is a date the student entered in Study Plans: it has no Canvas page, so it links to the plan instead. */
+  kind?: "assignment" | "exam";
+};
 
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
@@ -41,8 +45,10 @@ export default function ScheduleGrid({ courses, deadlines = [] }: { courses: Sch
             return (
               <div key={day} className="schedule-due-cell">
                 {items.slice(0, MAX_CHIPS).map((item) => {
-                  const name = `${item.title}, ${item.course}, due ${DAY_LONG[day]} at ${timeOf(item.dueAt)}`;
-                  const inner = <><span className={`course-dot ${getCourseAccent(item.courseId)}`} aria-hidden="true" /><span className="due-time">{timeOf(item.dueAt)}</span><span className="due-title">{item.title}</span></>;
+                  const exam = item.kind === "exam";
+                  const name = `${item.title}, ${exam ? "exam, " : ""}${item.course}, ${exam ? "on" : "due"} ${DAY_LONG[day]} at ${timeOf(item.dueAt)}`;
+                  const inner = <><span className={`course-dot ${getCourseAccent(item.courseId)}`} aria-hidden="true" /><span className="due-time">{timeOf(item.dueAt)}</span><span className="due-title">{item.title}</span>{exam && <span className="due-tag" aria-hidden="true">Exam</span>}</>;
+                  if (exam) return <Link key={item.key} className="schedule-due is-exam" href="/study-plans" title={name} aria-label={`${name} (opens Study Plans)`}>{inner}</Link>;
                   return item.url
                     ? <a key={item.key} className="schedule-due" href={item.url} target="_blank" rel="noopener noreferrer" title={name} aria-label={`${name} (opens in Canvas)`}>{inner}</a>
                     : <span key={item.key} className="schedule-due" title={name} aria-label={name}>{inner}</span>;
@@ -92,7 +98,7 @@ export default function ScheduleGrid({ courses, deadlines = [] }: { courses: Sch
               {/* Shown on phones only; on wide screens the Due row above already carries these, so they are not read twice. */}
               {dueOn(day).map((item) => (
                 <li key={item.key} className={`agenda-due ${getCourseAccent(item.courseId)}`}>
-                  <span className="agenda-time">Due {timeOf(item.dueAt)}</span>
+                  <span className="agenda-time">{item.kind === "exam" ? "Exam" : "Due"} {timeOf(item.dueAt)}</span>
                   <span><strong>{item.title}</strong> · {item.course}</span>
                 </li>
               ))}

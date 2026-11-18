@@ -952,3 +952,52 @@ a.schedule-due:hover { background: var(--row-hover); }
   .week-label { min-width: 0; }
 }
 .schedule-agenda li.agenda-due { background: var(--surface); border: 1px solid var(--border-strong); border-left: 3px solid var(--course-accent, var(--accent)); }
+
+/* Study Plans */
+.plan { margin-bottom: var(--space-6); }
+.plan-meta { margin: 2px 0 0; color: var(--muted); font-size: var(--text-sm); }
+.plan-passed { color: var(--danger); font-weight: 500; }
+.plan-check { display: inline-flex; align-items: baseline; gap: var(--space-2); cursor: pointer; font-weight: 500; }
+.plan-check input { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.plan-check .is-done { color: var(--muted); text-decoration: line-through; }
+.plan-when { gap: var(--space-1) var(--space-3); }
+.plan-when .work-relative { min-width: 0; }
+.plan-add { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.plan-add input { flex: 1 1 240px; min-width: 0; min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-base); }
+.plan-add select, .plan-field select, .plan-field input { min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--control-border); border-radius: var(--radius-md); background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-base); }
+.plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) 0; }
+.plan-proposal { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--table-heading); }
+.plan-proposal h3 { margin: 0 0 var(--space-2); font-size: var(--text-base); font-weight: 600; }
+.plan-proposal ul { margin: 0 0 var(--space-2); padding: 0; list-style: none; font-size: var(--text-base); }
+.plan-proposal li + li { margin-top: var(--space-1); }
+.plan-form fieldset { margin: 0; padding: var(--space-3) 0 0; border: 0; }
+.plan-mode legend { margin-bottom: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.plan-mode { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
+.plan-mode label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--control-height); cursor: pointer; }
+.plan-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--muted); font-size: var(--text-sm); }
+.plan-field select { max-width: 100%; }
+.plan-custom { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); margin: var(--space-3) 0; }
+.plan-form > .plan-field { margin: var(--space-3) 0; max-width: 560px; }
+.plan-empty { max-width: 60ch; padding: var(--space-6) 0; }
+.plan-empty h2 { margin-bottom: var(--space-2); font-size: var(--text-md); font-weight: 600; }
+.plan-empty p { margin-bottom: var(--space-4); color: var(--muted); font-size: var(--text-base); line-height: 1.7; }
+.plan-prefs { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: var(--text-base); }
+.plan-prefs summary { min-height: 28px; cursor: pointer; font-weight: 500; }
+.plan-prefs form { padding-top: var(--space-3); }
+@media (max-width: 767px) {
+  .plan-add input, .plan-add select, .plan-field select, .plan-field input { min-height: 44px; }
+  .plan-check input { width: 20px; height: 20px; }
+  .plan-check { min-height: 44px; align-items: center; }
+  .plan-prefs summary { min-height: 44px; display: flex; align-items: center; }
+}
+.plan-pick { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--table-heading); }
+.plan-pick > p { margin: 0 0 var(--space-2); font-size: var(--text-base); }
+.plan-pick-fields { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); margin-bottom: var(--space-2); }
+.plan-pick-fields .plan-field input { min-height: var(--control-height); }
+.plan-pick-fields .assistant-hint { margin: 0 0 6px; }
+.plan-pick .coverage-notice ul { margin: var(--space-1) 0; padding-left: var(--space-5); list-style: disc; }
+.plan-pick .coverage-notice p { margin: var(--space-1) 0; }
+.due-tag { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--foreground-secondary); font-size: var(--text-xs); font-weight: 600; line-height: 1.5; }
+.schedule-due.is-exam { border-color: var(--control-border); }
+.schedule-due.is-exam { flex-wrap: wrap; row-gap: 2px; }
+.schedule-due.is-exam .due-title { flex: 1 1 5em; }

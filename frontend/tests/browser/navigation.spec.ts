@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { mockConsent } from "./consent";
 
-const LABELS = ["Dashboard", "Courses", "Upcoming", "Priorities", "Class Schedule", "Study Assistant", "Settings"];
+const LABELS = ["Dashboard", "Courses", "Upcoming", "Priorities", "Class Schedule", "Study Plans", "Study Assistant", "Settings"];
 
 // Pages call the backend for data; navigation must work even when it is unreachable.
 async function open(page: Page, path = "/priorities") {
@@ -14,7 +14,7 @@ async function open(page: Page, path = "/priorities") {
 test.describe("desktop sidebar", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test("shows all seven destinations, marks the current page, and has no Menu button", async ({ page }) => {
+  test("shows all eight destinations, marks the current page, and has no Menu button", async ({ page }) => {
     await open(page);
     const nav = page.getByRole("navigation", { name: "Main navigation" });
     for (const label of LABELS) await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();

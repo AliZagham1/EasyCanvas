@@ -278,6 +278,18 @@ class IngestionStore:
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                     PRIMARY KEY (namespace, meeting_id)
                 );
+                CREATE TABLE IF NOT EXISTS study_plans (
+                    namespace TEXT NOT NULL, plan_id TEXT NOT NULL, course_id INTEGER NOT NULL, kind TEXT NOT NULL,
+                    assignment_id INTEGER, title TEXT NOT NULL, due_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY (namespace, plan_id)
+                );
+                CREATE TABLE IF NOT EXISTS plan_activities (
+                    namespace TEXT NOT NULL, activity_id TEXT NOT NULL, plan_id TEXT NOT NULL, position INTEGER NOT NULL,
+                    title TEXT NOT NULL, minutes INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0,
+                    start_at TEXT, end_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY (namespace, activity_id)
+                );
                 CREATE TABLE IF NOT EXISTS api_credentials (
                     namespace TEXT NOT NULL, provider TEXT NOT NULL,
                     api_key TEXT NOT NULL, saved_at TEXT NOT NULL,
@@ -1023,6 +1035,69 @@ class IngestionStore:
         with self._connection() as connection:
             return connection.execute("DELETE FROM class_meetings WHERE namespace=? AND course_id=? AND status='dismissed'",
                                       (self.namespace, course_id)).rowcount
+
+    # ---- study plans: the student's own data, kept when course materials are cleaned up ----
+    @staticmethod
+    def _plain(row):
+        record = {key: row[key] for key in row.keys() if key != 'namespace'}
+        if 'done' in record:
+            record['done'] = bool(record['done'])
+        return record
+
+    def list_study_plans(self):
+        with self._connection() as connection:
+            rows = connection.execute('SELECT * FROM study_plans WHERE namespace=? ORDER BY due_at, created_at',
+                                      (self.namespace,)).fetchall()
+        return [self._plain(row) for row in rows]
+
+    def get_study_plan(self, plan_id):
+        with self._connection() as connection:
+            row = connection.execute('SELECT * FROM study_plans WHERE namespace=? AND plan_id=?',
+                                     (self.namespace, plan_id)).fetchone()
+        return self._plain(row) if row else None
+
+    def save_study_plan(self, record):
+        with self._connection() as connection:
+            connection.execute(
+                'INSERT OR REPLACE INTO study_plans (namespace, plan_id, course_id, kind, assignment_id, title, due_at, '
+                'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (self.namespace, record['plan_id'], record['course_id'], record['kind'], record.get('assignment_id'),
+                 record['title'], record['due_at'], record['created_at'], record['updated_at']))
+
+    def delete_study_plan(self, plan_id):
+        with self._connection() as connection:
+            connection.execute('DELETE FROM plan_activities WHERE namespace=? AND plan_id=?', (self.namespace, plan_id))
+            return connection.execute('DELETE FROM study_plans WHERE namespace=? AND plan_id=?',
+                                      (self.namespace, plan_id)).rowcount > 0
+
+    def list_plan_activities(self, plan_id=None):
+        query, args = 'SELECT * FROM plan_activities WHERE namespace=?', [self.namespace]
+        if plan_id:
+            query += ' AND plan_id=?'
+            args.append(plan_id)
+        with self._connection() as connection:
+            rows = connection.execute(query + ' ORDER BY plan_id, position, created_at', args).fetchall()
+        return [self._plain(row) for row in rows]
+
+    def get_plan_activity(self, activity_id):
+        with self._connection() as connection:
+            row = connection.execute('SELECT * FROM plan_activities WHERE namespace=? AND activity_id=?',
+                                     (self.namespace, activity_id)).fetchone()
+        return self._plain(row) if row else None
+
+    def save_plan_activity(self, record):
+        with self._connection() as connection:
+            connection.execute(
+                'INSERT OR REPLACE INTO plan_activities (namespace, activity_id, plan_id, position, title, minutes, done, '
+                'start_at, end_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (self.namespace, record['activity_id'], record['plan_id'], record['position'], record['title'],
+                 record['minutes'], int(bool(record.get('done'))), record.get('start_at'), record.get('end_at'),
+                 record['created_at'], record['updated_at']))
+
+    def delete_plan_activity(self, activity_id):
+        with self._connection() as connection:
+            return connection.execute('DELETE FROM plan_activities WHERE namespace=? AND activity_id=?',
+                                      (self.namespace, activity_id)).rowcount > 0
 
     def save_api_key(self, api_key, provider='openai'):
         """Store the user's key locally (database file is mode 0600). Never returned by any API."""

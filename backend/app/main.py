@@ -24,6 +24,7 @@ from backend.app import consent_service
 from backend.app.consent_service import AIConsentRequired
 from fastapi.responses import JSONResponse
 from backend.app import schedule_service
+from backend.app import study_plan_service
 from backend.app import course_overview_service
 from backend.app import assistant_events
 from starlette.concurrency import run_in_threadpool
@@ -288,6 +289,142 @@ def restore_schedule_suggestions(course_id: int = Path(gt=0)):
         _known_course(store, course_id)
         store.delete_dismissed_suggestions(course_id)
     _schedule_call(restore)
+    return {'ok': True}
+
+
+# ---- study plans (Stage A: the student's own steps and a rules-based search for free time; no AI) ----
+PLAN_ID = r'^[0-9a-f]{32}$'
+
+
+class NewPlan(BaseModel):
+    model_config = {'extra': 'forbid'}
+    course_id: StrictInt
+    assignment_id: StrictInt | None = None
+    title: str | None = Field(default=None, max_length=300)
+    due_at: str | None = Field(default=None, max_length=40)
+
+
+class PlanPreferences(BaseModel):
+    model_config = {'extra': 'forbid'}
+    day_start: str | None = Field(default=None, max_length=5)
+    day_end: str | None = Field(default=None, max_length=5)
+    max_minutes_per_day: StrictInt | None = None
+    buffer_minutes: StrictInt | None = None
+
+
+class NewStep(BaseModel):
+    model_config = {'extra': 'forbid'}
+    title: str = Field(max_length=300)
+    minutes: StrictInt
+
+
+class StepChanges(BaseModel):
+    model_config = {'extra': 'forbid'}
+    title: str | None = Field(default=None, max_length=300)
+    minutes: StrictInt | None = None
+    done: bool | None = Field(default=None, strict=True)
+
+
+class PlannedSession(BaseModel):
+    model_config = {'extra': 'forbid'}
+    activity_id: str = Field(pattern=PLAN_ID)
+    start_at: str = Field(max_length=40)
+    end_at: str = Field(max_length=40)
+
+
+class ChosenTime(BaseModel):
+    model_config = {'extra': 'forbid'}
+    start_at: str = Field(max_length=40)
+    replace_conflicts: bool = Field(default=False, strict=True)
+
+
+class PlannedSessions(BaseModel):
+    model_config = {'extra': 'forbid'}
+    sessions: list[PlannedSession] = Field(max_length=study_plan_service.MAX_ACTIVITIES)
+
+
+def _plan_call(action):
+    """Map plan errors to safe HTTP responses."""
+    try:
+        return action(default_store())
+    except study_plan_service.PlanConflict as conflict:
+        # 409: the time is booked. The body lists what is there so the student can choose to add it anyway.
+        return JSONResponse(status_code=409, content={'detail': str(conflict), 'conflicts': conflict.conflicts})
+    except study_plan_service.PlanError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from None
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail='Canvas could not be reached, so the assignment could not be checked. Please retry.') from None
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='Study plans are unavailable. Please retry.') from None
+
+
+def _canvas_assignment(course_id, assignment_id):
+    """The assignment as Canvas reports it now (same data and cache as Priorities); None when it is not there."""
+    for item in priority_service.get_priorities().get('assignments', []):
+        if item.get('course_id') == course_id and item.get('id') == assignment_id:
+            return item
+    return None
+
+
+@app.get('/api/study-plans')
+def study_plans():
+    return _plan_call(study_plan_service.build_plans)
+
+
+@app.put('/api/study-plans/preferences')
+def study_plan_preferences(body: PlanPreferences):
+    return _plan_call(lambda store: study_plan_service.set_preferences(store, body.model_dump(exclude_none=True)))
+
+
+@app.post('/api/study-plans', status_code=201)
+def create_study_plan(body: NewPlan):
+    return _plan_call(lambda store: study_plan_service.create_plan(store, body.model_dump(), fetch_assignment=_canvas_assignment))
+
+
+@app.delete('/api/study-plans/{plan_id}')
+def delete_study_plan(plan_id: str = Path(pattern=PLAN_ID)):
+    _plan_call(lambda store: study_plan_service.delete_plan(store, plan_id))
+    return {'ok': True}
+
+
+@app.post('/api/study-plans/{plan_id}/activities', status_code=201)
+def add_plan_step(body: NewStep, plan_id: str = Path(pattern=PLAN_ID)):
+    return _plan_call(lambda store: study_plan_service.add_activity(store, plan_id, body.model_dump()))
+
+
+@app.patch('/api/study-plans/{plan_id}/activities/{activity_id}')
+def edit_plan_step(body: StepChanges, plan_id: str = Path(pattern=PLAN_ID), activity_id: str = Path(pattern=PLAN_ID)):
+    return _plan_call(lambda store: study_plan_service.update_activity(store, plan_id, activity_id, body.model_dump(exclude_unset=True)))
+
+
+@app.delete('/api/study-plans/{plan_id}/activities/{activity_id}')
+def delete_plan_step(plan_id: str = Path(pattern=PLAN_ID), activity_id: str = Path(pattern=PLAN_ID)):
+    _plan_call(lambda store: study_plan_service.delete_activity(store, plan_id, activity_id))
+    return {'ok': True}
+
+
+@app.post('/api/study-plans/{plan_id}/suggest')
+def suggest_plan_times(plan_id: str = Path(pattern=PLAN_ID)):
+    """Propose times for the unscheduled steps. Nothing is saved until the student accepts."""
+    return _plan_call(lambda store: study_plan_service.suggest_times(store, plan_id))
+
+
+@app.put('/api/study-plans/{plan_id}/times')
+def accept_plan_times(body: PlannedSessions, plan_id: str = Path(pattern=PLAN_ID)):
+    return _plan_call(lambda store: study_plan_service.accept_times(store, plan_id, [s.model_dump() for s in body.sessions]))
+
+
+@app.put('/api/study-plans/{plan_id}/activities/{activity_id}/time')
+def choose_plan_step_time(body: ChosenTime, plan_id: str = Path(pattern=PLAN_ID), activity_id: str = Path(pattern=PLAN_ID)):
+    """The student picks when to study a step. 409 with the overlaps unless replace_conflicts is true."""
+    return _plan_call(lambda store: study_plan_service.set_time(store, plan_id, activity_id, body.start_at, replace=body.replace_conflicts))
+
+
+@app.delete('/api/study-plans/{plan_id}/activities/{activity_id}/time')
+def clear_plan_step_time(plan_id: str = Path(pattern=PLAN_ID), activity_id: str = Path(pattern=PLAN_ID)):
+    _plan_call(lambda store: study_plan_service.clear_time(store, plan_id, activity_id))
     return {'ok': True}
 
 
