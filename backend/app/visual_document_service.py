@@ -24,6 +24,61 @@ VISUAL_WARNINGS = {"images_not_extracted", "drawing_or_embedded_content_not_extr
 SUPPORTED = ("pdf", "doc", "docx", "ppt", "pptx")
 
 
+# ---------------------------------------------------------------- damaged text layers (EC-025)
+# LibreOffice can render a Word file with substitute fonts whose PDF text layer is damaged: "c" becomes "," and stray letters
+# appear ("instru,tor", "firrst", "theerefore"). The clean Word paragraphs are the reference. A damaged word is one that is not in
+# the Word text but is one letter away from a word that is (a signature that header or cover-page words do not have).
+GARBLE_MIN_WORDS = 8
+GARBLE_MIN_SHARE = 0.03
+GARBLE_MIN_COMMAS = 8
+GARBLE_MIN_REFERENCE_WORDS = 30
+_WORD = re.compile(r"[^\W\d_]{2,}")
+
+
+def _one_deletion_forms(word):
+    return {word[:i] + word[i + 1:] for i in range(len(word))}
+
+
+def text_layer_damage(reference_text, candidate_text):
+    """How damaged candidate_text looks, measured against the clean reference_text of the same document."""
+    reference = set(_WORD.findall((reference_text or "").casefold()))
+    if len(reference) < GARBLE_MIN_REFERENCE_WORDS:
+        return {"near_miss_words": 0, "near_miss_share": 0.0, "glued_commas": 0, "measurable": False}
+    index = {}
+    for word in reference:
+        index.setdefault(word, set()).add(word)
+        for form in _one_deletion_forms(word):
+            index.setdefault(form, set()).add(word)
+    candidate = set(_WORD.findall((candidate_text or "").casefold()))
+    near = sum(1 for word in candidate if word not in reference and len(word) >= 3
+               and (word in index or any(form in index for form in _one_deletion_forms(word))))
+    glue = re.compile(r"[A-Za-z],[A-Za-z]")
+    commas = max(0, len(glue.findall(candidate_text or "")) - len(glue.findall(reference_text or "")))   # math and code have their own
+    return {"near_miss_words": near, "near_miss_share": near / max(1, len(candidate)), "glued_commas": commas, "measurable": True}
+
+
+def text_layer_garbled(reference_text, candidate_text):
+    damage = text_layer_damage(reference_text, candidate_text)
+    return damage["measurable"] and ((damage["near_miss_words"] >= GARBLE_MIN_WORDS and damage["near_miss_share"] >= GARBLE_MIN_SHARE)
+                                     or damage["glued_commas"] >= GARBLE_MIN_COMMAS)
+
+
+def _damage_score(reference_text, candidate_text):
+    damage = text_layer_damage(reference_text, candidate_text)
+    return damage["near_miss_words"] + damage["glued_commas"]
+
+
+def stored_text_layer_garbled(document):
+    """A saved Word file whose pages kept a damaged native text layer (only pages the vision model did not read)."""
+    if document.get("format") != "docx" or not document.get("blocks"):
+        return False
+    native_pages = [unit.get("text", "") for unit in document.get("rendered_pages") or [] if unit.get("extraction_method") == "native"]
+    if not native_pages:
+        return False
+    reference = " ".join(block.get("text", "") for block in document["blocks"])
+    return text_layer_garbled(reference, " ".join(native_pages))
+
+
 def pending_visual_content(document):
     """Identify unprocessed/failed visuals; a genuine completed partial is retained."""
     if document.get('stale') or document.get('format') not in SUPPORTED:
@@ -31,6 +86,8 @@ def pending_visual_content(document):
     report = document.get('visual_processing') or {}
     if report.get('pending') or report.get('failed') or report.get('retry_needed'):
         return True
+    if not report.get('text_layer') and stored_text_layer_garbled(document):
+        return True        # processed before the damaged-text check existed; re-render once (the new run records its result)
     units = document.get('pages') or document.get('slides') or document.get('rendered_pages') or document.get('visual_inspection_pages') or []
     if any(u.get('extraction_status') in ('vision_pending', 'vision_failed', 'rendered_content_missing') for u in units):
         return True
@@ -200,6 +257,7 @@ def extract_file(metadata, content, *, store, course_id, provider=None, enabled=
         return native
     enabled = (provider is not None or vision_enabled(store)) if enabled is None else enabled
     result = copy.deepcopy(native)
+    text_layer = None
     content_hash = hashlib.sha256(content).hexdigest()
     try:
         if format_name == "pdf":
@@ -256,6 +314,24 @@ def extract_file(metadata, content, *, store, course_id, provider=None, enabled=
             units, report = _process_pdf(rendered, pdf_native["pages"], store=store, course_id=course_id,
                                          content_hash=content_hash, unit_kind="rendered_word_page", provider=provider,
                                          enabled=enabled, settings=settings)
+            if format_name == "docx" and native.get("text"):
+                from backend.app import legacy_office
+                units_text = "\n\n".join(unit.get("text", "") for unit in units)
+                text_layer = "ok"
+                if text_layer_garbled(native["text"], units_text):
+                    text_layer = "unreliable"
+                    try:
+                        fixed = legacy_office.normalize_docx_fonts(content)
+                        fixed_pdf = legacy_office.render_office_pdf(fixed, format_name)
+                        retry_units, retry_report = _process_pdf(
+                            fixed_pdf, document_service.extract_pdf(fixed_pdf)["pages"],
+                            store=store, course_id=course_id, content_hash=hashlib.sha256(fixed).hexdigest(),
+                            unit_kind="rendered_word_page", provider=provider, enabled=enabled, settings=settings)
+                        retry_text = "\n\n".join(unit.get("text", "") for unit in retry_units)
+                        if _damage_score(native["text"], retry_text) <= .5 * _damage_score(native["text"], units_text):
+                            units, report, text_layer = retry_units, retry_report, "repaired"
+                    except legacy_office.LegacyConversionError:
+                        pass
             # Keep original native blocks; never invent a mapping from Word
             # paragraph numbers to renderer-dependent pagination.
             for unit in units:
@@ -278,12 +354,16 @@ def extract_file(metadata, content, *, store, course_id, provider=None, enabled=
                 return result
             result["rendered_pages"] = units
             result["warnings"] = sorted(set(native.get("warnings", [])) - VISUAL_WARNINGS)
+            if text_layer == "unreliable":
+                result["warnings"] = sorted(set(result["warnings"]) | {"rendered_text_layer_unreliable"})
         result["text"] = "\n\n".join(u["text"] for u in units if u.get("text"))
         result["character_count"] = len(result["text"])
         incomplete = any(u["status"] not in ("ok",) for u in units) or bool(result.get("warnings"))
         result["status"] = ("partial" if incomplete else "ok") if result["text"] else "no_text"
         result["visual_processing"] = {**report, "retry_needed": bool(report["failed"]), "enabled": enabled,
                                         "configuration": visual_configuration(provider, settings)}
+        if text_layer:
+            result["visual_processing"]["text_layer"] = text_layer
     except (pdfium.PdfiumError, ValueError) as error:
         result.update(status="partial" if result.get("text") else "no_text",
                       warnings=sorted(set(result.get("warnings") or []) | {"visual_inspection_failed"}),

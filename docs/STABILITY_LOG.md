@@ -492,10 +492,7 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
      who is the instructor, grading scale/breakdown, class meeting time/location, "syllabus") now search the syllabus only, like policy
      questions. The phrases are deliberately specific so ordinary subject questions that share a word stay on course material.
 - Found, not fixed:
-  - **Garbled text in the source files.** In 12 saved documents a lowercase "c" appears as a comma inside words ("instru,tor", "Fun,tional",
-    "A,,essibility"; 373 words in the CSE 3302 syllabus alone). It is in the file's native text layer, not introduced by our reader: where a page
-    was re-read by the vision model it came out clean. It lowers retrieval quality and can reach the student if the model quotes it. A fix needs a
-    design decision (repair against the course vocabulary, or prefer vision for pages with this pattern) and a re-index.
+  - **Garbled text in the source files** — fixed in EC-025.
   - **Retrieval is embeddings only.** Even for ordinary questions a short, labeled fact can rank behind semantically similar but less useful
     passages (rank 7 of 20 here). A keyword boost or reranking would help; the logistics routing above covers only one family of questions.
   - **Quiz and rubric dead ends.** "What is on Quiz 4?" gives a generic "no usable material" (the quiz is closed until Dec 1 and has no saved
@@ -504,3 +501,17 @@ Previously logged as EC-001; renamed to the requested EC-009 identifier. This is
   was not obeyed; a study-plan request said it is not implemented; follow-ups ("and when is it due?") kept their context; general concept answers
   were labeled; document summaries carried honest "selected sections" and "could not be read reliably" warnings.
 
+
+## EC-025 — Garbled text ("instru,tor", "firrst") in rendered Word documents
+- Symptom: Word files showed a lowercase "c" as a comma and stray doubled letters in their saved text, which hurt search and could be quoted to
+  the student. The CSE 3302 syllabus alone had 373 such words. An earlier count of "12 documents" was wrong (math and code legitimately contain
+  `a,c`); measured properly, 4 of 24 Word files and 20 pages were damaged.
+- Root cause: the instructor's .docx is clean. EasyCanvas renders Word files to PDF with LibreOffice, and when a font such as SimSun is missing,
+  LibreOffice substitutes another one whose PDF text layer is damaged. Our reader then trusted that text layer.
+- Fix: `visual_document_service.text_layer_garbled` compares the rendered text with the clean Word paragraphs. A damaged word is not in the
+  Word text but is one letter away from a word that is; glued commas beyond what the source has also count. When a render is damaged the file is
+  re-rendered once with `legacy_office.normalize_docx_fonts` (every font becomes Arial, except symbol and code fonts), under its own vision-cache
+  hash. The retry is used only if it has at most half the damage. `visual_processing.text_layer` records `ok`, `repaired` or `unreliable`
+  (plus the warning `rendered_text_layer_unreliable`), and `pending_visual_content` queues saved damaged files once so a re-sync repairs them.
+- Verified: on the real syllabus the retry removes the damage (373 words down to 2 near-misses). Tests in `test_damaged_text_layer.py`.
+- Not verified: the other 3 damaged Word files were not re-rendered, and the live re-sync with vision enabled was not run (it costs credits).
