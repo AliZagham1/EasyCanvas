@@ -14,6 +14,7 @@ const links: NavLink[] = [
   { href: "/upcoming", label: "Upcoming", path: "M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" },
   { href: "/priorities", label: "Priorities", path: "M5 21V4 M5 4c4-4 10 4 14 0v10c-4 4-10-4-14 0" },
   { href: "/class-schedule", label: "Class Schedule", path: "M7 3v4 M17 3v4 M3 10h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M8 14h3v3H8z M15 14h2" },
+  { href: "/study-plans", label: "Study Plans", path: "M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z M8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2 M9 14l2 2 4-4" },
   { href: "/study-assistant", label: "Study Assistant", path: "M21 11a8 8 0 0 1-8 8H7l-5 3V5a2 2 0 0 1 2-2h9a8 8 0 0 1 8 8Z M7 8h9 M7 12h6" },
   { href: "/settings", label: "Settings", path: "M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6", secondary: true },
 ];

@@ -65,7 +65,7 @@ test("Settings is one column of five consistently styled sections", async ({ pag
   expect(new Set(widths).size).toBe(1);                                                    // every section has the same width
 });
 
-for (const path of ["/", "/courses", "/upcoming", "/priorities", "/class-schedule", "/study-assistant", "/settings"]) {
+for (const path of ["/", "/courses", "/upcoming", "/priorities", "/class-schedule", "/study-plans", "/study-assistant", "/settings"]) {
   test(`${path} has no sideways scrolling on a phone`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await page.route("**/127.0.0.1:8000/api/**", route => route.request().url().includes("/api/ai-consent") ? route.fallback() : route.fulfill({ status: 503, json: {} }));

@@ -25,10 +25,11 @@ const assignments = () => [
   ...[1, 2, 3, 4, 5].map((i) => item(`Friday task ${i}`, `2026-11-20T${String(14 + i).padStart(2, "0")}:00:00Z`)),
 ];
 
-async function open(page: Page, priorities: "ok" | "fail" = "ok") {
+async function open(page: Page, priorities: "ok" | "fail" = "ok", plans: unknown[] = []) {
   await page.route("**/api/schedule", (route) => route.fulfill({ json: schedule }));
   await page.route("**/api/priorities**", (route) => priorities === "fail" ? route.fulfill({ status: 502, json: {} })
     : route.fulfill({ json: { fetched_at: NOW.toISOString(), cached: false, courses: [{ id: 1, course_code: "a", name: "a" }], assignments: assignments(), failed_course_ids: [] } }));
+  await page.route("**/api/study-plans", (route) => route.fulfill({ json: { plans, preferences: { day_start: "09:00", day_end: "21:00", max_minutes_per_day: 240, buffer_minutes: 120 } } }));
   await page.clock.setFixedTime(NOW);
   await page.goto("/class-schedule");
 }
@@ -88,5 +89,50 @@ test("on a phone the agenda lists deadlines; on a wide screen they are not read 
   await expect(page.locator(".agenda-due").first()).toBeVisible();
   await expect(page.getByRole("listitem", { name: "Wednesday" })).toContainText("Due 5:00 PM");
   await expect(page.getByRole("listitem", { name: "Wednesday" })).toContainText("Wednesday quiz");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+const plan = (id: number, kind: string, title: string, due: string) => ({ plan_id: String(id).padStart(32, "0"), course_id: 1, kind, assignment_id: kind === "assignment" ? 7 : null, title, due_at: due,
+  course_code: "2268-CSE-4321-002", course_name: "TESTING", time_zone: "America/Chicago", activities: [], needed_minutes: 0, scheduled_minutes: 0, done_minutes: 0 });
+const examPlans = () => [
+  plan(1, "custom", "Midterm exam", "2026-11-19T15:00:00Z"),            // Thursday 9:00 AM local, this week
+  plan(2, "custom", "Old exam", "2026-11-16T15:00:00Z"),                // Monday, already past
+  plan(3, "assignment", "Homework 7", "2026-11-19T23:00:00Z"),          // an assignment plan: Canvas already supplies that deadline
+  plan(4, "custom", "Final exam", "2026-11-25T16:00:00Z"),              // next week
+];
+
+test("exams entered in Study Plans appear in the Due row, tagged, and open the plan", async ({ page }) => {
+  await open(page, "ok", examPlans());
+  const thu = page.locator(".schedule-due-cell").nth(3);
+  const exam = thu.getByRole("link", { name: /Midterm exam, exam, CSE 4321, on Thursday at 9:00 AM \(opens Study Plans\)/ });
+  await expect(exam).toHaveAttribute("href", "/study-plans");
+  await expect(exam).not.toHaveAttribute("target", /.*/);                                   // an internal page, not Canvas
+  await expect(exam).toContainText("Exam");
+  await expect(exam).toContainText("9:00 AM");
+  const row = page.locator(".schedule-head");
+  await expect(row).not.toContainText("Old exam");                                          // past
+  await expect(row).not.toContainText("Homework 7");                                        // assignment plans are not repeated
+  await expect(row).not.toContainText("Final exam");                                        // next week
+  await expect(page.locator(".schedule-due.is-exam")).toHaveCount(1);
+  await expect(page.getByText(/7 deadlines/)).toBeVisible();                                // 6 assignments plus the exam
+  await exam.click();
+  await expect(page).toHaveURL(/\/study-plans$/);
+});
+
+test("an exam in a later week shows when you move to that week", async ({ page }) => {
+  await open(page, "ok", examPlans());
+  await page.getByRole("button", { name: "Next week" }).click();
+  await expect(page.locator(".schedule-due.is-exam")).toHaveCount(1);
+  await expect(page.locator(".schedule-head")).toContainText("Final exam");
+  await expect(page.locator(".schedule-head")).not.toContainText("Midterm exam");
+});
+
+test("exams still show when the assignment deadlines cannot be loaded, and on a phone the agenda says Exam", async ({ page }) => {
+  await open(page, "fail", examPlans());
+  await expect(page.getByRole("status").filter({ hasText: "Deadlines could not be loaded" })).toBeVisible();
+  await expect(page.locator(".schedule-due.is-exam")).toHaveCount(1);
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect(page.getByRole("listitem", { name: "Thursday" })).toContainText("Exam 9:00 AM");
+  await expect(page.getByRole("listitem", { name: "Thursday" })).toContainText("Midterm exam");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

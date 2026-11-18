@@ -77,6 +77,10 @@ assistant functionality are not implemented by this ingestion step.
     Non-AI features and Canvas Sync never depend on it. New AI call paths must call `consent_service.require_ai_consent(store)`
     immediately before the request. See `docs/specs/ai-consent.md`.
 
+13. Study Plans (`/study-plans`, `/api/study-plans`, `backend/app/study_plan_service.py`): the student's own steps for an assignment or exam
+    plus rules-based free-time search around classes and saved sessions. No AI; deadlines come from Canvas or the student, never from
+    a model; times are proposed and saved only on acceptance. See `docs/specs/study-plans.md`.
+
 ## Current Development Priorities
 
 Work should currently focus on these areas, in roughly this order:

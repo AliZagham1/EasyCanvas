@@ -6,8 +6,10 @@ import { formatCourseCode } from "@/lib/course-label";
 import { getCourseAccent } from "@/lib/coursework";
 import { buildPriorityView, dayIndexInWeek, formatDayNumber, getPriorities, localWeekStart, resolveTimeZone } from "@/lib/priorities";
 import type { PriorityItem } from "@/lib/priorities";
+import { getPlans } from "@/lib/study-plans";
+import type { StudyPlan } from "@/lib/study-plans";
 import {
-  KIND_LABEL, courseLabel, courseTitle, createMeeting, deleteMeeting, dismissSuggestion, formatDays, formatRange, getSchedule,
+  DAYS, KIND_LABEL, courseLabel, courseTitle, createMeeting, deleteMeeting, dismissSuggestion, formatDays, formatRange, getSchedule,
   restoreSuggestions, updateMeeting,
 } from "@/lib/schedule";
 import type { DayCode, Meeting, MeetingInput, ScheduleCourse, ScheduleData, Suggestion } from "@/lib/schedule";
@@ -35,6 +37,7 @@ export default function ClassSchedulePage() {
   // Unsubmitted, not-yet-due assignments for the "Due" row. They come from the same Priorities data and rules as the Priorities page.
   const [priorityItems, setPriorityItems] = useState<PriorityItem[] | null>(null);
   const [deadlinesFailed, setDeadlinesFailed] = useState(false);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [now, setNow] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const zone = useMemo(() => resolveTimeZone(), []);
@@ -45,20 +48,43 @@ export default function ClassSchedulePage() {
     getPriorities({ signal: controller.signal }).then((payload) => {
       if (!controller.signal.aborted) setPriorityItems(payload.assignments);
     }).catch(() => { if (!controller.signal.aborted) setDeadlinesFailed(true); });   // the schedule must work without deadlines
+    getPlans(controller.signal).then((payload) => { if (!controller.signal.aborted) setPlans(payload.plans); }).catch(() => {});   // and without plans
     return () => { controller.abort(); clearTimeout(clock); };
   }, []);
 
   const weekStart = now ? localWeekStart(now, zone) + 7 * weekOffset : 0;
   const deadlines: GridDeadline[] = useMemo(() => {
-    if (!priorityItems || !now) return [];
-    const view = buildPriorityView(priorityItems, now, { courseId: "all", level: "all", showCompleted: false }, "due", zone);
-    return view.upcoming.flatMap((item) => {
+    if (!now) return [];
+    const assignments: GridDeadline[] = !priorityItems ? [] : buildPriorityView(priorityItems, now, { courseId: "all", level: "all", showCompleted: false }, "due", zone).upcoming.flatMap((item) => {
       const index = item.dueMs === null ? null : dayIndexInWeek(item.dueMs, weekStart, zone);
       if (index === null || !item.due_at) return [];
       return [{ key: `${item.course_id}-${item.id}`, courseId: item.course_id, course: formatCourseCode(item.course_code, item.course_name || "Course"),
-        title: item.name || "Untitled assignment", url: item.html_url, dueAt: item.due_at, dayIndex: index }];
+        title: item.name || "Untitled assignment", url: item.html_url, dueAt: item.due_at, dayIndex: index, kind: "assignment" as const }];
     });
-  }, [priorityItems, now, weekStart, zone]);
+    // Exams and other dates the student entered in Study Plans. Assignment plans are skipped: Canvas already supplies that deadline.
+    const exams: GridDeadline[] = plans.flatMap((plan) => {
+      const due = Date.parse(plan.due_at);
+      const index = plan.kind !== "custom" || Number.isNaN(due) || due <= now ? null : dayIndexInWeek(due, weekStart, zone);
+      if (index === null) return [];
+      return [{ key: `exam-${plan.plan_id}`, courseId: plan.course_id, course: formatCourseCode(plan.course_code, plan.course_name || "Course"),
+        title: plan.title, url: null, dueAt: plan.due_at, dayIndex: index, kind: "exam" as const }];
+    });
+    return [...assignments, ...exams];
+  }, [priorityItems, plans, now, weekStart, zone]);
+  // Study sessions saved from Study Plans, shown as study blocks on their date. Display only: they are not meetings.
+  const sessions: Meeting[] = useMemo(() => {
+    if (!now) return [];
+    const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: zone });
+    return plans.flatMap((plan) => plan.activities.flatMap((step) => {
+      if (!step.start_at || !step.end_at || step.done) return [];
+      const index = dayIndexInWeek(Date.parse(step.start_at), weekStart, zone);
+      if (index === null) return [];
+      return [{ meeting_id: `session-${step.activity_id}`, course_id: plan.course_id, kind: "study" as const, days: [DAYS[index]], start_time: clock(step.start_at),
+        end_time: clock(step.end_at), location: step.title, source: "manual" as const, source_text: null, fingerprint: null }];
+    }));
+  }, [plans, now, weekStart, zone]);
+  const courses = useMemo(() => data?.courses ?? [], [data]);
+  const gridCourses = useMemo(() => courses.map((course) => ({ ...course, meetings: [...course.meetings, ...sessions.filter((session) => session.course_id === course.course_id)] })), [courses, sessions]);
   const weekRange = now ? `${formatDayNumber(weekStart)} – ${formatDayNumber(weekStart + 6)}` : "";
 
   useEffect(() => {
@@ -99,7 +125,6 @@ export default function ClassSchedulePage() {
     } finally { setBusy(false); }
   }
 
-  const courses = data?.courses ?? [];
   const confirmed = courses.reduce((sum, course) => sum + course.meetings.length, 0);
   const pending = courses.reduce((sum, course) => sum + course.suggestions.length, 0);
   const sorted = [...courses].sort((a, b) => courseLabel(a).localeCompare(courseLabel(b)));
@@ -156,14 +181,15 @@ export default function ClassSchedulePage() {
                 )}
                 <span className="panel-note">
                   {confirmed === 0 ? "No confirmed classes yet" : `${confirmed} confirmed class time${confirmed === 1 ? "" : "s"}`}
-                  {priorityItems && ` · ${deadlines.length} deadline${deadlines.length === 1 ? "" : "s"}`}
+                  {(priorityItems || deadlines.length > 0) && ` · ${deadlines.length} deadline${deadlines.length === 1 ? "" : "s"}`}
+                  {sessions.length > 0 && ` · ${sessions.length} study session${sessions.length === 1 ? "" : "s"}`}
                 </span>
               </div>
             </div>
             {deadlinesFailed && <p className="assistant-hint schedule-note" role="status">Deadlines could not be loaded, so only class times are shown.</p>}
-            {confirmed === 0 && deadlines.length === 0
+            {confirmed === 0 && deadlines.length === 0 && sessions.length === 0
               ? <p className="list-message">Confirm a suggestion or add a class time below to see your week here.</p>
-              : <ScheduleGrid courses={courses} deadlines={deadlines} />}
+              : <ScheduleGrid courses={gridCourses} deadlines={deadlines} />}
           </section>
 
           {sorted.map((course) => {

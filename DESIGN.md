@@ -601,7 +601,7 @@ Two-column grid: title and meta on the left, due date and relative label on the 
 
 ### Class Schedule
 
-**Implemented layout (Phase 3):** flat Next class line, the weekly grid (course colors identify blocks), then one unboxed section per course with its times as rows. `Add class time` and `Add study block` are quiet small ghost buttons; `Delete` is red text. Suggestions are tinted callouts with a muted label. Unsubmitted, not-yet-due deadlines appear in a "Due" row under the day names as small outlined chips (course dot, time, title; up to three, then "+N more"), clearly different from the filled class blocks; a week selector (previous, next, this week) pages through future weeks.
+**Implemented layout (Phase 3):** flat Next class line, the weekly grid (course colors identify blocks), then one unboxed section per course with its times as rows. `Add class time` and `Add study block` are quiet small ghost buttons; `Delete` is red text. Suggestions are tinted callouts with a muted label. Unsubmitted, not-yet-due deadlines appear in a "Due" row under the day names as small outlined chips (course dot, time, title; up to three, then "+N more"), clearly different from the filled class blocks; a week selector (previous, next, this week) pages through future weeks. Exams the student entered in Study Plans appear in the same row with a small "Exam" tag and link to Study Plans instead of Canvas.
 
 
 The Class Schedule page should support:
@@ -624,6 +624,10 @@ If extraction is running, show progress.
 If no schedule is found, manual entry must be obvious.
 
 The schedule should eventually act as fixed unavailable time for study planning.
+
+### Study Plans
+
+**Implemented layout:** one unboxed section per plan: the title, `course · Due date · relative`, a one-line summary (`3 steps · 1 done · 2 h 30 min left · 1 of 2 scheduled`), step rows in the shared `.work-row` pattern (checkbox, title and length on the left; the saved time or "Not scheduled", Clear time and Remove on the right), an add-step line, a bordered "Proposed times" panel with **Save these times** as its one primary action, then Suggest times and a two-step Delete plan. `New plan` is the page's one primary button. Each open step has a quiet **Pick time** / **Change time** link that opens an inline form (date, start, computed end). A booked time shows a warning panel listing what is there, with **Add anyway** as the primary action and **Choose another time**. Planning preferences sit in a collapsed section at the bottom.
 
 ### Study Assistant
 

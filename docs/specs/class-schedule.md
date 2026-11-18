@@ -57,6 +57,11 @@ overdue work is intentionally excluded. On phones the agenda lists them under ea
 list is hidden from assistive technology so the same deadline is not read twice. If Priorities data cannot be loaded, classes still
 show with a short note. This is a non-AI feature and needs no AI consent.
 
+### Exams and other dates
+Dates the student entered as a custom plan in Study Plans (an exam or other item, not a Canvas assignment) also appear in the "Due" row,
+with a small **Exam** tag. They have no Canvas page, so the chip opens `/study-plans`. Only future dates in the shown week appear;
+assignment plans are skipped because Canvas already supplies that deadline. They show even when Canvas deadlines cannot be loaded.
+
 ## Limitations
 - Only recurring weekly meetings. No holidays, exam dates, one-off changes or per-week exceptions.
 - "Next class" uses wall-clock minutes in the course's time zone, so it can be an hour off in the week of a daylight-saving change.
