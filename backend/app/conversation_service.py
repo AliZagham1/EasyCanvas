@@ -8,7 +8,8 @@ import uuid
 import threading
 from dataclasses import dataclass, field
 
-from backend.app import rag_service
+from backend.app import consent_service, rag_service
+from backend.app.consent_service import AIConsentRequired
 from backend.app.embedding_service import default_store, validate_course_id, EmbeddingProviderError
 from backend.app.llm_service import OpenAIAnswerProvider, LLMProviderError
 from backend.app.query_understanding_service import understand_question
@@ -200,6 +201,8 @@ class ConversationService:
                     yield event
         except asyncio.CancelledError:
             raise
+        except AIConsentRequired:
+            yield {"event": "error", "data": {"message": consent_service.MESSAGE, "code": consent_service.ERROR_CODE}}
         except ConversationError as error:
             yield {"event": "error", "data": {"message": str(error)}}
         except (LLMProviderError, EmbeddingProviderError, rag_service.RAGValidationError):

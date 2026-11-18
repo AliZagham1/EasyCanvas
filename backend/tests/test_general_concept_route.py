@@ -215,3 +215,6 @@ class GeneralConceptStreamTests(RoutingFixture, unittest.IsolatedAsyncioTestCase
                                                     course_reference='CSE 3311'))
         self.assertNotEqual(result['retrieval_route'], 'general_concept')
         self.assertFalse(provider.general_contexts)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

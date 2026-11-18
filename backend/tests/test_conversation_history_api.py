@@ -63,3 +63,6 @@ class HistoryAPITests(unittest.IsolatedAsyncioTestCase):
             code,body = await request(self.base)
         self.assertEqual(code,503)
         self.assertNotIn('private',json.dumps(body))
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

@@ -230,3 +230,6 @@ class AnswerDepthTests(unittest.TestCase):
     def test_invalid_constraint_shapes_are_rejected(self):
         for changes in ({'excluded_references':[1]}, {'operation':'invent'}, {'entity_type':'made-up'}):
             with self.assertRaises(ValueError):validate_understanding(empty_understanding('Question',**changes))
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

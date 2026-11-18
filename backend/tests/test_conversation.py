@@ -284,3 +284,6 @@ class ProviderStreamTests(unittest.IsolatedAsyncioTestCase):
             self.client(events)
             with self.assertRaises(LLMProviderError):
                 async for _ in OpenAIAnswerProvider(api_key="fake-key", usage_recorder=False).stream_generate("rules",42,"Question",[{"id":"S1"}],{}): pass
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

@@ -11,6 +11,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+from backend.app import consent_service
 from backend.app.ingestion_store import IngestionStore, validate_vector
 
 
@@ -52,6 +53,7 @@ class OpenAIEmbeddingProvider:
         if self.configuration.provider != "openai":
             raise ValueError("This provider supports only OpenAI.")
         load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+        consent_service.require_ai_consent(getattr(usage_recorder, "store", None))
         from backend.app.openai_key_service import resolve_api_key
         self._api_key = api_key or resolve_api_key(getattr(usage_recorder, "store", None))[0]
         if not self._api_key:
@@ -61,6 +63,7 @@ class OpenAIEmbeddingProvider:
 
     def embed_texts(self, texts):
         """Return vectors in input order plus reported prompt-token usage."""
+        consent_service.require_ai_consent(getattr(self.usage_recorder, "store", None))
         if not isinstance(texts, list) or not 1 <= len(texts) <= 32:
             raise ValueError("Embedding batches must contain 1 to 32 texts.")
         # UTF-8 byte bound conservatively stays below the 8,192-token input cap;
@@ -70,6 +73,8 @@ class OpenAIEmbeddingProvider:
         payload = {"model": self.configuration.model, "dimensions": self.configuration.dimensions,
                    "encoding_format": "float", "input": texts}
         for attempt in range(3):
+            if attempt:
+                consent_service.require_ai_consent(getattr(self.usage_recorder, "store", None))  # a retry is a new request
             try:
                 response = requests.post(
                     "https://api.openai.com/v1/embeddings", json=payload,

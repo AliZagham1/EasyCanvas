@@ -878,6 +878,15 @@ class IngestionStore:
             row = connection.execute('SELECT settings_json FROM app_settings WHERE namespace=?', (self.namespace,)).fetchone()
         return {'auto_index': True, 'monthly_warning_usd': None, 'vision_enabled': None, **(json.loads(row[0]) if row else {})}
 
+    def load_ai_consent(self):
+        """The raw saved consent record (or None). Interpretation and default-deny live in consent_service."""
+        with self._connection() as connection:
+            row = connection.execute('SELECT settings_json FROM app_settings WHERE namespace=?', (self.namespace,)).fetchone()
+        return json.loads(row[0]).get('ai_consent') if row else None
+
+    def save_ai_consent(self, record):
+        self.update_settings({'ai_consent': record})
+
     def update_settings(self, changes):
         """Merge preferences atomically so simultaneous controls cannot erase each other."""
         with self._connection() as connection:

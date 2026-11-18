@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { mockConsent } from './consent';
 import type { Page } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => { await mockConsent(page); });
 
 function course(status = 'pending', remaining = 4) {
   return {course_id:42,title:'2268-CSE-3311-001',eligible_chunks:1203,indexed_chunks:1203-remaining,

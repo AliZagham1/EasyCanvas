@@ -91,3 +91,6 @@ class WarningRelevanceTests(unittest.TestCase):
         result = rag_service._finish_answer(report,response,sources,question='Can you solve this assignment?')
         self.assertEqual(result['warnings'],[])
         self.assertEqual(result['retrieved_sources'][0]['origins'][0]['warnings'],['images_not_extracted'])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

@@ -212,3 +212,6 @@ class ModuleConversationTests(ModuleFixture,unittest.IsolatedAsyncioTestCase):
         events=[e async for e in sessions.events(session,'What about the client?','second',store=self.store,provider=provider,embedding_provider=self.embedding)]
         self.assertEqual(events[-1]['data']['status'],'answered')
         self.assertNotIn('assignment:204',events[-1]['data']['resolved_documents'])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

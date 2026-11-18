@@ -227,3 +227,6 @@ class CacheStateTests(unittest.TestCase):
         self.assertEqual(self.store.load_chunks(43),[])
         self.store.save_course({'course_id':42,'synced_at':'later'})
         self.assertEqual(self.store.load_chunks(42),[])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

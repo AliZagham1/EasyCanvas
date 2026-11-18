@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { mockConsent } from './consent';
 import type { Page } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => { await mockConsent(page); });
 
 const NOW = new Date('2026-11-17T18:00:00Z'); // Tuesday 12:00 in Chicago
 const at = (hours: number) => new Date(NOW.getTime() + hours * 3_600_000).toISOString();

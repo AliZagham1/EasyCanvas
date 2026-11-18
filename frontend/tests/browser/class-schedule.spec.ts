@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { mockConsent } from './consent';
 import type { Page } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => { await mockConsent(page); });
 
 type Meeting = { meeting_id: string; course_id: number; kind: string; days: string[]; start_time: string; end_time: string; location: string | null;
   source: string; source_text: string | null; fingerprint: string | null };

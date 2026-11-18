@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { mockConsent } from "./consent";
+
+test.beforeEach(async ({ page }) => { await mockConsent(page); });
 import type { Page } from "@playwright/test";
 
 const sid = "00000000-0000-4000-8000-000000000042";

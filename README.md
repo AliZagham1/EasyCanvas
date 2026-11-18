@@ -36,6 +36,13 @@ Stack: Next.js, React, TypeScript, Tailwind CSS; Python, FastAPI, Requests, and 
 Class schedules, study plans, MCP,
 LangGraph, and PostgreSQL migration are **planned**, not implemented features.
 
+## AI consent
+
+EasyCanvas asks once, globally, before sending any course content to external AI services (OpenAI). Declining keeps
+Dashboard, Upcoming, Priorities, Courses, Class Schedule and Canvas Sync working; the Study Assistant, search indexing and
+image reading stay off. Change the choice any time in **Settings -> AI & Privacy**. Withdrawing stops new AI requests but does
+not delete local data or recall data already sent. See [AI consent](docs/specs/ai-consent.md).
+
 ## Prerequisites
 
 - Git and access to the team's repository/branch.

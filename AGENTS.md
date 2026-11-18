@@ -72,6 +72,11 @@ separate worker process. Legacy DOC/PPT use a local LibreOffice converter; conve
 structure remains explicitly unverified. OCR, other document formats, RAG, and AI
 assistant functionality are not implemented by this ingestion step.
 
+12. Global AI consent (`/api/ai-consent`, `backend/app/consent_service.py`): AI features are off until the student agrees in the
+    first-visit modal or Settings -> AI & Privacy. Every external AI call checks consent server-side; unknown means denied.
+    Non-AI features and Canvas Sync never depend on it. New AI call paths must call `consent_service.require_ai_consent(store)`
+    immediately before the request. See `docs/specs/ai-consent.md`.
+
 ## Current Development Priorities
 
 Work should currently focus on these areas, in roughly this order:

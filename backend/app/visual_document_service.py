@@ -115,6 +115,9 @@ def vision_enabled(store=None):
     A value saved in Settings wins; otherwise the backend .env default applies. Without a store
     (tests, tools) only the environment is consulted.
     """
+    from backend.app import consent_service
+    if not consent_service.is_ai_enabled(store):
+        return False  # no AI consent: native text and local rendering only
     if store is not None:
         try:
             saved = store.load_settings().get("vision_enabled")

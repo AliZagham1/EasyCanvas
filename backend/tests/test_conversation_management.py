@@ -105,3 +105,6 @@ class ConversationManagementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(validate_title('  数学 – révision  '),'数学 – révision')
         for bad in ('','   ','x'*101,'bad\x00name','two\nlines',3):
             with self.subTest(bad=bad),self.assertRaises(ValueError):validate_title(bad)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

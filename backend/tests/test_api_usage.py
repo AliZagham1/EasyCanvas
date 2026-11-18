@@ -127,3 +127,6 @@ class UsageTests(unittest.TestCase):
         events = asyncio.run(run())
         self.assertEqual([event['event'] for event in events], ['answer_delta','complete'])
         self.assertEqual(usage_summary(self.store)['total']['calls'], 1)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

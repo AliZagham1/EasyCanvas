@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
 import Sidebar from "./components/sidebar";
+import { AIConsentProvider } from "./components/ai-consent-provider";
 import "./globals.css";
 
 const inter = localFont({
@@ -33,6 +34,7 @@ export default function RootLayout({
       className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full">
+        <AIConsentProvider>
         <div className="app-shell">
           {/* The sidebar reads the URL; routes with a dynamic segment (/courses/[courseId]) need it inside Suspense. */}
           <Suspense fallback={<aside className="sidebar" aria-hidden="true" />}>
@@ -40,6 +42,7 @@ export default function RootLayout({
           </Suspense>
           <main className="app-main">{children}</main>
         </div>
+        </AIConsentProvider>
       </body>
     </html>
   );

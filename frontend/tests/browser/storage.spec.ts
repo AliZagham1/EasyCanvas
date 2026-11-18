@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { mockConsent } from "./consent";
+
+test.beforeEach(async ({ page }) => { await mockConsent(page); });
 
 function preview() {
   return { preview_id: "a".repeat(64), grace_days: 30, blocked_reason: null, eligible_bytes: 102400, chats_preserved: true,

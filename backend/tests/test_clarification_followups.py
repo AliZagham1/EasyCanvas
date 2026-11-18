@@ -117,3 +117,6 @@ class ClarificationFollowupTests(unittest.IsolatedAsyncioTestCase):
         events = [e async for e in self.sessions.events(active,'all','retry',store=self.store,provider=self.provider)]
         self.assertEqual(events[-1]['event'],'error')
         self.assertTrue(session.clarification)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

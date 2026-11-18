@@ -20,6 +20,9 @@ from backend.app.course_sync_service import CourseSyncService
 from backend.app import priority_service
 from backend.app import visual_document_service
 from backend.app import openai_key_service
+from backend.app import consent_service
+from backend.app.consent_service import AIConsentRequired
+from fastapi.responses import JSONResponse
 from backend.app import schedule_service
 from backend.app import course_overview_service
 from backend.app import assistant_events
@@ -309,6 +312,61 @@ def assistant_diagnostics(hours: int = Query(default=24, ge=1, le=720)):
         raise HTTPException(status_code=503, detail='Assistant diagnostics are unavailable. Please retry.') from None
 
 
+def _consent_denied():
+    """403 with a stable code, so clients can tell missing consent from retrieval failures and model errors."""
+    return JSONResponse(status_code=403, content={'detail': consent_service.MESSAGE, 'code': consent_service.ERROR_CODE})
+
+
+def _require_consent_or_403():
+    """Route-level gate for AI endpoints; services and providers enforce it again at the actual boundary."""
+    try:
+        store = default_store()
+    except (OSError, sqlite3.Error, ValueError):
+        store = None  # unknown consent is denied
+    consent_service.require_ai_consent(store)  # AIConsentRequired -> 403 via the handler below
+
+
+@app.exception_handler(AIConsentRequired)
+async def _consent_required_handler(request, exc):
+    return _consent_denied()
+
+
+class ConsentDecision(BaseModel):
+    model_config = {'extra': 'forbid'}
+    decision: Literal['granted', 'declined', 'withdrawn']
+    version: StrictInt
+
+
+@app.get('/api/ai-consent')
+def ai_consent_status():
+    try:
+        return consent_service.consent_view(default_store())
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='AI consent status is unavailable. Please retry.') from None
+
+
+@app.put('/api/ai-consent')
+def ai_consent_decide(body: ConsentDecision, request: Request):
+    try:
+        store = default_store()
+        try:
+            view = consent_service.record_decision(store, body.decision, body.version)
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from None
+        if view['enabled']:
+            # Resume safely: queue_course only queues chunks that still lack embeddings, and only if automatic updates are on.
+            for course_id in store.saved_current_course_ids():
+                snapshot = store.load_course(course_id)
+                if snapshot and not snapshot.get('materials_removed'):
+                    search_index_service.queue_course(course_id, store=store)
+            service = getattr(request.app.state, 'course_sync', None)
+            if service:
+                service.ensure_worker()
+        return view
+    except (OSError, sqlite3.Error, ValueError):
+        raise HTTPException(status_code=503, detail='Your AI choice could not be saved. Please retry.') from None
+
+
 @app.get('/api/openai-key')
 def openai_key_status():
     """Whether a key is in use and its last 4 characters. The key itself is never returned."""
@@ -320,6 +378,7 @@ def openai_key_status():
 
 @app.put('/api/openai-key')
 async def save_openai_key(request: Request):
+    _require_consent_or_403()
     """Verify the key with OpenAI (a free request), then save it locally. Errors never echo the key."""
     try:
         body = await request.json()
@@ -369,6 +428,7 @@ def course_search_status(course_id: int = Path(gt=0)):
 
 @app.post('/api/courses/{course_id}/search-index', status_code=202)
 def update_course_search(request: Request, course_id: int = Path(gt=0)):
+    _require_consent_or_403()
     try:
         status = search_index_service.queue_course(course_id, manual=True)
         service = getattr(request.app.state, 'course_sync', None)
@@ -398,8 +458,11 @@ class AssistantQuestion(BaseModel):
 @app.post("/api/courses/{course_id}/assistant")
 def assistant(body: AssistantQuestion, course_id: int = Path(gt=0)):
     """Expose the existing stateless RAG service without duplicating its logic."""
+    _require_consent_or_403()
     try:
         return rag_service.answer_question(course_id, body.question)
+    except AIConsentRequired:
+        return _consent_denied()
     except rag_service.RAGValidationError:
         raise HTTPException(status_code=502, detail="The assistant returned an invalid answer. Please retry.") from None
     except (LLMProviderError, EmbeddingProviderError):
@@ -500,6 +563,7 @@ async def assistant_stream(body: ConversationQuestion, request: Request, course_
     """A thin SSE adapter; session, retrieval and generation stay in services."""
     import asyncio
     import json
+    _require_consent_or_403()
     try:
         session = conversations.acquire(get_cache_namespace(), course_id,
                                         str(body.conversation_id) if body.conversation_id else None)

@@ -250,3 +250,6 @@ class IngestionPipelineTests(unittest.TestCase):
         self.assertEqual(report["statistics"]["unavailable"], 1)
         self.assertEqual(report["statistics"]["readable"], 2)
         self.assertEqual(report["snapshot"]["coverage"], "partial")
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

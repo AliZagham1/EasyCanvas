@@ -5,14 +5,15 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { getCourses } from "@/lib/coursework";
 import type { Course } from "@/lib/coursework";
 import { formatCourseCode } from "@/lib/course-label";
-import { streamAssistant, conversationHistory } from "@/lib/assistant";
+import { streamAssistant, conversationHistory, ConsentRequiredError } from "@/lib/assistant";
+import { useAIConsent } from "../components/ai-consent-provider";
 import type { ConversationSummary, SavedConversation } from "@/lib/assistant";
 import AssistantMessage from "../components/assistant-message";
 import type { ChatTurn } from "../components/assistant-message";
 import ConversationActions from "../components/conversation-actions";
 import CourseSearchStatus from "../components/course-search-status";
 
-export default function StudyAssistantPage() {
+function StudyAssistantChat() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState(false);
@@ -32,6 +33,7 @@ export default function StudyAssistantPage() {
   const thread = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
   const input = useRef<HTMLTextAreaElement>(null);
+  const consent = useAIConsent();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -112,6 +114,8 @@ export default function StudyAssistantPage() {
       }, controller.signal);
     } catch (error) {
       if (request.current !== controller) return;
+      // Consent was withdrawn elsewhere: the gate below switches to the disabled screen.
+      if (error instanceof ConsentRequiredError) void consent.refresh();
       update(id, { phase: "error", draft: [], response: undefined,
         error: controller.signal.aborted ? "Response stopped. You can retry this question." : error instanceof Error ? error.message : "Unable to complete the response. Please retry." });
       setNotice(controller.signal.aborted ? "Response stopped." : "Response interrupted. Retry is available.");
@@ -175,4 +179,23 @@ export default function StudyAssistantPage() {
     </form>
     <p className="conversation-announcement" role="status" aria-live="polite">{notice}</p>
   </div>;
+}
+
+/** The assistant needs AI consent. Without it, show why instead of a chat that cannot work, and make no requests. */
+export default function StudyAssistantPage() {
+  const { gate, openConsent, refresh } = useAIConsent();
+  if (gate === "loading") return <div className="page-content"><p className="assistant-hint" role="status">Checking AI settings...</p></div>;
+  if (gate !== "enabled") {
+    return <div className="page-content conversation-page">
+      <header className="page-header"><div><h1 className="page-title">Study Assistant</h1></div></header>
+      <div className="ai-disabled" role="region" aria-labelledby="ai-disabled-title">
+        <h2 id="ai-disabled-title">AI Study Assistant is disabled</h2>
+        <p>Enable AI features to get beginner-friendly explanations of assignments, lecture materials, and study topics.</p>
+        {gate === "unavailable"
+          ? <><p role="alert">AI settings could not be loaded, so AI stays off.</p><button type="button" className="primary-button" onClick={() => void refresh()}>Retry</button></>
+          : <button type="button" className="primary-button" onClick={openConsent}>Enable AI Features</button>}
+      </div>
+    </div>;
+  }
+  return <StudyAssistantChat />;
 }

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { API_KEY_CHANGED_EVENT, describeApiKey, getApiKeyStatus, removeApiKey, saveApiKey } from "@/lib/search-index";
 import type { ApiKeyStatus } from "@/lib/search-index";
+import { AIOffNotice } from "./ai-consent-provider";
 
 /** Lets a student bring their own OpenAI key. The key is sent once, never shown again, and never read back. */
 export default function OpenAIKeyCard() {
@@ -34,6 +35,7 @@ export default function OpenAIKeyCard() {
 
   return <section className="api-key-card" aria-labelledby="api-key-title">
     <h2 id="api-key-title" className="section-title">OpenAI API key</h2>
+    <AIOffNotice>AI features are off, so a key cannot be saved or checked yet.</AIOffNotice>
     <p className="assistant-hint" role="status">{describeApiKey(status)}</p>
     {error && <p className="coverage-notice" role="alert">{error}</p>}
     {message && <p className="assistant-hint search-save-status" role="status">{message}</p>}

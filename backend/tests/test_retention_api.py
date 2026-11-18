@@ -53,3 +53,6 @@ class RetentionApiTests(unittest.TestCase):
         with patch.object(main, 'default_store', return_value=store):
             self.assertEqual(asyncio.run(request('PATCH', '/api/storage/courses/10', {'keep': True}))[0], 200)
         store.set_course_kept.assert_called_once_with(10, True)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

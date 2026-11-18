@@ -103,3 +103,6 @@ class VisualBackfillTests(unittest.TestCase):
         self.assertEqual(saved['version'],saved['content_hash'])
         self.assertEqual(saved['references'],original['references'])
         self.assertEqual(saved['pages'][0]['extraction_method'],'vision')
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

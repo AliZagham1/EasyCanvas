@@ -2,8 +2,20 @@
 import { useEffect, useState } from "react";
 import { getSearchStatus, searchStatusLabel, updateSearch } from "@/lib/search-index";
 import type { CourseIndex } from "@/lib/search-index";
+import { useAIConsent } from "./ai-consent-provider";
 
+/** Course search is built with external AI (embeddings). Without consent it is off and no request is made. */
 export default function CourseSearchStatus({ courseId }: { courseId: number }) {
+  const { gate, openConsent } = useAIConsent();
+  if (gate === "loading") return null;
+  if (gate !== "enabled") return <div className="course-search-status">
+    <p role="status">Course search is off because AI features are disabled.</p>
+    {gate === "disabled" && <button type="button" className="primary-button" onClick={openConsent}>Enable AI Features</button>}
+  </div>;
+  return <CourseSearchStatusEnabled courseId={courseId} />;
+}
+
+function CourseSearchStatusEnabled({ courseId }: { courseId: number }) {
   const [status, setStatus] = useState<CourseIndex | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

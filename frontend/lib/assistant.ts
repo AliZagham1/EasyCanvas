@@ -34,6 +34,16 @@ export type AssistantResponse = {
   material_notice?: string | null;
 };
 
+/** The backend refused because AI consent is missing or withdrawn (HTTP 403, code ai_consent_required). */
+export const AI_CONSENT_REQUIRED = "ai_consent_required";
+export class ConsentRequiredError extends Error {
+  constructor() { super("AI features are turned off. Enable AI Features to use the Study Assistant."); this.name = "ConsentRequiredError"; }
+}
+async function isConsentRefusal(response: Response) {
+  if (response.status !== 403) return false;
+  try { return (await response.clone().json()).code === AI_CONSENT_REQUIRED; } catch { return false; }
+}
+
 export const GENERAL_KNOWLEDGE_LABEL = "General knowledge · not from your course materials";
 
 /** A visible basis label only for answers the backend marks as general knowledge. */
@@ -90,6 +100,7 @@ export async function askAssistant(courseId: number, question: string, signal?: 
     body: JSON.stringify({ question }),
     signal,
   });
+  if (await isConsentRefusal(response)) throw new ConsentRequiredError();
   // Do not display upstream response bodies or backend implementation details.
   if (!response.ok) throw new Error("The assistant is unavailable. Please try again.");
   const data: AssistantResponse = await response.json();
@@ -142,7 +153,7 @@ export type ConversationEvent =
   | { event: "searching" | "generating"; data: Record<string, never> }
   | { event: "answer_delta"; data: { blocks: string[] } }
   | { event: "final"; data: AssistantResponse }
-  | { event: "error"; data: { message: string } };
+  | { event: "error"; data: { message: string; code?: string } };
 
 /** Parse actual SSE frames, including split UTF-8/network boundaries. */
 export async function streamAssistant(courseId: number, question: string, turnId: string,
@@ -151,6 +162,7 @@ export async function streamAssistant(courseId: number, question: string, turnId
     method: "POST", headers: { "Content-Type": "application/json" }, signal,
     body: JSON.stringify({ question, turn_id: turnId, conversation_id: conversationId }),
   });
+  if (await isConsentRefusal(response)) throw new ConsentRequiredError();
   if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
     throw new Error(response.status === 409 ? "This conversation expired or is busy. Start a new conversation or retry." : "The assistant is unavailable. Please retry.");
   }
@@ -180,6 +192,7 @@ export async function streamAssistant(courseId: number, question: string, turnId
           if (data.course_id !== courseId || !["answered", "insufficient_context", "needs_structured_data", "indexing_needed", "refused", "clarification_needed"].includes(data.status) || !Array.isArray(data.sources) || !Array.isArray(data.answer_blocks) || !Array.isArray(data.warnings) || typeof data.answer !== "string" || data.sources.some((source: AssistantSource) => typeof source.id !== "string" || !Array.isArray(source.origins) || source.origins.some((origin) => !Array.isArray(origin.locations))) || data.answer_blocks.some((block: {text: string; source_ids: string[]}) => typeof block.text !== "string" || !Array.isArray(block.source_ids))) throw new Error("Invalid final response.");
           final = true;
         }
+        if (kind === "error" && data.code === AI_CONSENT_REQUIRED) throw new ConsentRequiredError();
         if (kind === "error") throw new Error("The response was interrupted or could not be validated. Please retry.");
         if (!["session", "searching", "generating", "answer_delta", "final"].includes(kind)) throw new Error("Unknown assistant stream event.");
         onEvent({ event: kind, data } as ConversationEvent);
@@ -188,7 +201,7 @@ export async function streamAssistant(courseId: number, question: string, turnId
     }
     if (!final || buffer.trim()) throw new Error("The response was interrupted. Please retry.");
   } catch (error) {
-    if (signal.aborted) throw error;
+    if (signal.aborted || error instanceof ConsentRequiredError) throw error;
     throw new Error("The response was interrupted or could not be validated. Please retry.");
   } finally {
     await reader.cancel().catch(() => {});

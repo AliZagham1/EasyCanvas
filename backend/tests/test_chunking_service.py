@@ -422,3 +422,6 @@ class ChunkStorageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

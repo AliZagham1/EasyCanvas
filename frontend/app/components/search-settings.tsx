@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatCourseCode } from "@/lib/course-label";
 import { API_KEY_CHANGED_EVENT, compactSearchStatus, keyLabel, formatApiCost, getSearchCourses, getSearchSettings, saveSearchSettings, searchImpactNotice, updateSearch, usageWarningProgress } from "@/lib/search-index";
 import type { CourseIndex, SearchPreferences } from "@/lib/search-index";
+import { AIOffNotice } from "./ai-consent-provider";
 
 export default function SearchSettings() {
   const [preferences, setPreferences] = useState<SearchPreferences | null>(null);
@@ -78,6 +79,7 @@ export default function SearchSettings() {
 
   return <section className="search-settings" aria-labelledby="search-settings-title">
     <h2 id="search-settings-title" className="section-title">Study Assistant search</h2>
+    <AIOffNotice>AI features are off, so no course material is being indexed or sent for AI processing. Your choices below are kept and apply when AI is enabled.</AIOffNotice>
     {error && <p className="coverage-notice" role="alert">{error}</p>}
     {message && <p className="assistant-hint search-save-status" role="status">{message}</p>}
     {!preferences ? !error && <p role="status">Loading search settings...</p> : <>

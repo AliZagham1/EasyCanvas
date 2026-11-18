@@ -10,6 +10,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+from backend.app import consent_service
+
 
 # Question understanding is a short call: fail fast, then retry transient errors (rate limits, timeouts, 5xx) with backoff.
 UNDERSTANDING_TIMEOUT = 25
@@ -74,6 +76,7 @@ class OpenAIAnswerProvider:
 
     def __init__(self, model=None, api_key=None, usage_recorder=None):
         load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+        consent_service.require_ai_consent(getattr(usage_recorder, "store", None))
         self.model = model if model is not None else os.getenv("EASYCANVAS_ANSWER_MODEL", "gpt-6-luna")
         if not isinstance(self.model, str) or not self.model.strip():
             raise ValueError("Answer model must be a nonempty model identifier.")
@@ -84,8 +87,13 @@ class OpenAIAnswerProvider:
         from backend.app.api_usage_service import UsageRecorder
         self.usage_recorder = usage_recorder if usage_recorder is not None else UsageRecorder()
 
+    def _require_consent(self):
+        """Checked before every provider request; unknown consent means denied."""
+        consent_service.require_ai_consent(getattr(self.usage_recorder, "store", None))
+
     def generate(self, instructions, course_id, question, passages):
         """Return parsed JSON and usage; never follow tools or persist a conversation."""
+        self._require_consent()
         payload = {
             "model": self.model, "store": False, "instructions": instructions,
             "input": json.dumps({"selected_course_id": course_id, "question": question, "passages": passages}),
@@ -94,6 +102,8 @@ class OpenAIAnswerProvider:
                                 "schema": answer_schema([p["id"] for p in passages])}},
         }
         for attempt in range(3):
+            if attempt:
+                self._require_consent()  # a retry is a new request
             try:
                 response = requests.post(
                     "https://api.openai.com/v1/responses", json=payload,
@@ -194,6 +204,7 @@ class OpenAIAnswerProvider:
     async def rewrite_query(self, course_id, question, conversation_context):
         """Resolve references only; return no answer and select no invented IDs."""
         from openai import AsyncOpenAI, OpenAIError
+        self._require_consent()
         model = os.getenv("EASYCANVAS_QUERY_MODEL") or self.model
         from backend.app.query_understanding_service import (
             QUERY_INSTRUCTIONS, PlanRejected, checked_understanding, log_plan_event, query_schema)
@@ -237,6 +248,8 @@ class OpenAIAnswerProvider:
         """
         from openai import AsyncOpenAI, OpenAIError
         from pydantic_core import from_json
+        self._require_consent()
+        watch = consent_service.ConsentWatch(getattr(self.usage_recorder, "store", None))
         text, previous, completed = "", [], False
         accounted, response_id = False, None
         try:
@@ -250,6 +263,7 @@ class OpenAIAnswerProvider:
                                      "schema": answer_schema([p["id"] for p in passages])}},
                 ) as stream:
                     async for event in stream:
+                        watch.check()  # withdrawal stops the stream at the next event; the open request is then closed
                         if event.type == 'response.created':
                             response_id = event.response.id
                         if event.type in ('response.completed', 'response.failed', 'response.incomplete') and self.usage_recorder:

@@ -100,3 +100,6 @@ class HarnessExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(r['status']=='pass' for r in rows))
         self.assertTrue(rows[0]['actual']['passages_to_fake_answer_provider'])
         self.assertEqual(rows[4]['actual']['active_assignments'],[])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

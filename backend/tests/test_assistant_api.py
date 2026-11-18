@@ -108,3 +108,6 @@ class AssistantApiTests(unittest.TestCase):
             code, body = self.ask()
             self.assertEqual(code, expected)
             self.assertNotIn(str(error), json.dumps(body))
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

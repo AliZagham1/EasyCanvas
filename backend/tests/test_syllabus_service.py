@@ -255,3 +255,6 @@ class SyllabusDownloadTests(unittest.TestCase):
     def test_html_masquerading_as_document_is_rejected(self):
         self.response.iter_content.return_value = [b"<html>Please sign in</html>"]
         with self.assertRaises(ValueError):service.fetch_syllabus(URL, 42)
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

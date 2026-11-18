@@ -10,6 +10,8 @@ from typing import Protocol
 
 from dotenv import load_dotenv
 
+from backend.app import consent_service
+
 VISION_PROMPT_VERSION = "academic-page-transcription-v1"
 VISION_INSTRUCTIONS = """Faithfully extract the complete visible academic content of this page.
 Transcribe in reading order, preserving question numbers, subquestions, code,
@@ -94,6 +96,7 @@ class OpenAIVisionExtractionProvider:
 
     def __init__(self, configuration=None, api_key=None, usage_recorder=None):
         load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+        consent_service.require_ai_consent(getattr(usage_recorder, "store", None))
         self.configuration = configuration or VisionConfiguration(model=os.getenv("EASYCANVAS_VISION_MODEL", "gpt-6-luna"))
         if self.configuration.provider != "openai":
             raise ValueError("This Vision provider supports only OpenAI")
@@ -106,6 +109,7 @@ class OpenAIVisionExtractionProvider:
 
     def extract_page(self, image_bytes, *, native_text):
         from openai import OpenAI, OpenAIError
+        consent_service.require_ai_consent(getattr(self.usage_recorder, "store", None))
 
         if not image_bytes.startswith(b"\x89PNG\r\n\x1a\n") or len(image_bytes) > 20000000:
             raise VisionProviderError("Invalid or oversized rendered page")

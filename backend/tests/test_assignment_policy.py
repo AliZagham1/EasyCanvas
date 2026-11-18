@@ -127,3 +127,6 @@ class PolicyStreamingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(e['event']=='answer_delta' for e in events))
         self.assertTrue(events[-1]['data']['policy_enforced'])
         self.assertNotIn('def solve',events[-1]['data']['answer'])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

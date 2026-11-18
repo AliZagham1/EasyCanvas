@@ -1,6 +1,7 @@
 """Persist and resume incremental course indexing in the existing sync worker."""
 from datetime import datetime, timedelta, timezone
 
+from backend.app import consent_service
 from backend.app.embedding_service import EmbeddingConfiguration, default_store, embed_course
 from backend.app.ingestion_store import material_refresh
 
@@ -64,7 +65,8 @@ def queue_course(course_id, *, store=None, manual=False, configuration=None):
     store = store or default_store()
     configuration = configuration or EmbeddingConfiguration()
     status = index_status(course_id, store=store, configuration=configuration)
-    if status['remaining_chunks'] and (manual or store.load_settings()['auto_index']):
+    # Without consent nothing is queued; index_status still reports what is pending.
+    if status['remaining_chunks'] and consent_service.is_ai_enabled(store) and (manual or store.load_settings()['auto_index']):
         store.queue_index_job(course_id, configuration, manual=manual)
     return index_status(course_id, store=store, configuration=configuration)
 
@@ -75,7 +77,7 @@ def recover_jobs(store):
         if job.get('status') == 'running':
             job.update(status='queued', error=None)
             store.save_index_job(course_id, job)
-    if store.load_settings()['auto_index']:
+    if consent_service.is_ai_enabled(store) and store.load_settings()['auto_index']:
         for course_id in store.saved_current_course_ids():
             snapshot = store.load_course(course_id)
             refresh = material_refresh(snapshot) if snapshot else None
@@ -93,6 +95,11 @@ def process_jobs(store, *, provider=None, batch_size=32):
     for course_id, job in store.index_jobs():
         if job.get('status') != 'queued':
             continue
+        if not consent_service.is_ai_enabled(store):
+            # Consent withdrawn (or never given): keep the job so re-enabling resumes it; call nothing.
+            job['status'] = 'paused'
+            store.save_index_job(course_id, job)
+            continue
         if job.get('reason') != 'manual' and not store.load_settings()['auto_index']:
             job['status'] = 'paused'
             store.save_index_job(course_id, job)
@@ -103,6 +110,8 @@ def process_jobs(store, *, provider=None, batch_size=32):
         def progress(report):
             job['generated'] = report['generated']
             store.save_index_job(course_id, job)
+            if not consent_service.is_ai_enabled(store):
+                raise _Paused()  # next safe boundary: batches already saved are kept
             if job.get('reason') != 'manual' and not store.load_settings()['auto_index']:
                 raise _Paused()
         def failed(batch):
@@ -115,8 +124,8 @@ def process_jobs(store, *, provider=None, batch_size=32):
             reports.append(report)
             # Replacements are now searchable; retained previous versions can go.
             store.prune_served_versions(course_id, configuration)
-        except _Paused:
-            job.update(status='paused')
+        except (_Paused, consent_service.AIConsentRequired):
+            job.update(status='paused', error=None, failed_hashes=[])
         except Exception:
             # No raw provider, text or credential details are persisted/exposed.
             job.update(status='failed', error='Course search could not be updated. Please retry.',

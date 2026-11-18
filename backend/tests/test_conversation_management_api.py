@@ -46,3 +46,6 @@ class ManagementAPITests(unittest.IsolatedAsyncioTestCase):
         code,body=await history.request(self.base+'/'+first['conversation_id'],'DELETE')
         self.assertEqual(code,409)
         self.assertIn('response',body['detail'])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

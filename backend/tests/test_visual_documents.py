@@ -502,3 +502,6 @@ class DocumentResolutionTests(unittest.TestCase):
         result = retrieve_evidence(42, "List all questions in Practice Questions 10", store=self.store, provider=self.provider)
         self.assertEqual(result["evidence_coverage"], {"selected": 1, "available": 1})
         self.assertEqual(result["results"][0]["selection"], "document_order")
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

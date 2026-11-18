@@ -239,3 +239,6 @@ class SyncApiTests(unittest.TestCase):
                 self.assertEqual((await self.request(main.app, "POST", "/api/ingestion/sync"))[0], 503)
         with patch.object(main, "CourseSyncService", side_effect=ValueError("missing config")):
             asyncio.run(run())
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

@@ -93,3 +93,6 @@ class ConversationApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events[-1]["event"], "error")
         self.assertFalse(any(event["event"] == "final" for event in events))
         self.assertEqual(next(iter(self.sessions.sessions.values())).history, [])
+
+
+import backend.tests.ai_consent_granted  # noqa: E402,F401  (AI tests use fake providers)

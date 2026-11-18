@@ -73,8 +73,12 @@ def fixture_clock_and_canvas(fixture):
 async def run_synthetic(cases, *, live=False):
     fixture, rows = EvaluationFixture(), []
     if live:
+        from backend.app import consent_service
+        from backend.app.api_usage_service import UsageRecorder
         from backend.app.llm_service import OpenAIAnswerProvider
-        provider = OpenAIAnswerProvider()
+        # --live is an explicit developer action against a throwaway fixture store, so consent is recorded there only.
+        consent_service.record_decision(fixture.store, 'granted', consent_service.CONSENT_VERSION)
+        provider = OpenAIAnswerProvider(usage_recorder=UsageRecorder(fixture.store))
     try:
         with fixture_clock_and_canvas(fixture):
             for case in cases:
