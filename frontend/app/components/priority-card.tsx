@@ -9,7 +9,7 @@ const STATUS_HINT = {
 } as Record<string, string>;
 
 // Presentation only: classification, sorting and fetching happen elsewhere.
-export default function PriorityCard({ item }: { item: RankedItem }) {
+export default function PriorityCard({ item, showCourse = true }: { item: RankedItem; showCourse?: boolean }) {
   const title = item.name || "Untitled assignment";
   const badge = item.overdue ? { text: "Overdue", tone: "overdue" } : item.level ? { text: LEVEL_LABEL[item.level], tone: item.level } : null;
   return (
@@ -26,8 +26,8 @@ export default function PriorityCard({ item }: { item: RankedItem }) {
           {badge && <span className={`priority-badge priority-${badge.tone}`}>{badge.text}</span>}
         </div>
         <p className="priority-meta">
-          <span title={item.course_name ?? undefined}>{formatCourseCode(item.course_code, item.course_name || "Course unavailable")}</span>
-          <span aria-hidden="true"> · </span>
+          {showCourse && <><span title={item.course_name ?? undefined}>{formatCourseCode(item.course_code, item.course_name || "Course unavailable")}</span>
+          <span aria-hidden="true"> · </span></>}
           <span className={item.statusLabel === "Missing" ? "priority-missing" : undefined} title={STATUS_HINT[item.statusLabel]}>
             {item.statusLabel}
           </span>

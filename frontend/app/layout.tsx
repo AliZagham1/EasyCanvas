@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import localFont from "next/font/local";
 import { Geist_Mono } from "next/font/google";
 import Sidebar from "./components/sidebar";
@@ -33,7 +34,10 @@ export default function RootLayout({
     >
       <body className="h-full">
         <div className="app-shell">
-          <Sidebar />
+          {/* The sidebar reads the URL; routes with a dynamic segment (/courses/[courseId]) need it inside Suspense. */}
+          <Suspense fallback={<aside className="sidebar" aria-hidden="true" />}>
+            <Sidebar />
+          </Suspense>
           <main className="app-main">{children}</main>
         </div>
       </body>

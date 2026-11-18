@@ -198,7 +198,7 @@ export default function Home() {
                     <td data-label="Upcoming" role="cell">
                       <div className="course-upcoming">
                         <span>{isLoading ? "Loading..." : hasError || failedCourseIds.includes(course.id) ? "Assignments unavailable" : `${getUpcomingCount(course.id)} upcoming`}</span>
-                        <span className="course-view-label" aria-disabled="true" title="Course view is not available yet">View →</span>
+                        <Link href={`/courses/${course.id}`} className="text-link">View →</Link>
                       </div>
                     </td>
                   </tr>

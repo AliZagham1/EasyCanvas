@@ -11,6 +11,8 @@ courses, assignments, and accessible course materials.
 - Priorities: a deterministic page showing what is due, when, and what to do first across all
   current courses (overdue, High/Medium/Low by deadline, no-due-date, completed, not actionable). No AI
   calls. See the [Priorities spec](docs/specs/priorities.md).
+- Courses: a card per course (next class, what is due, materials) and a page per course with its assignments, class times,
+  announcements and materials, plus a button that opens the Study Assistant on that course. See the [Courses spec](docs/specs/courses.md).
 - Class Schedule: a weekly grid of class meeting times. Suggestions are read from your syllabi by simple rules (no AI)
   and always show the quoted line; only times you confirm or type are used. The Dashboard shows your next class.
   See the [Class Schedule spec](docs/specs/class-schedule.md).

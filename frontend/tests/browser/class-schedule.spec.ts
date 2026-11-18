@@ -177,7 +177,7 @@ test('desktop shows the weekly grid; sidebar link is live', async ({ page }) => 
   await expect(page.locator('.schedule-dayhead')).toHaveText(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
   await expect(page.locator('.schedule-block')).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Class Schedule' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('Soon')).toHaveCount(1);                            // only "Courses" is left as Soon
+  await expect(page.getByText('Soon')).toHaveCount(0);                            // no sidebar link is left as "Soon"
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
 });
 

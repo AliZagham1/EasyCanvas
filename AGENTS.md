@@ -55,6 +55,8 @@ The following behavior is currently implemented in the committed repository:
    `frontend/lib/priorities.ts`. See `docs/specs/priorities.md`. It uses no LLM and does no grade calculation.
 10. Class Schedule (`/class-schedule`, `/api/schedule`): confirmed meeting times with rules-based syllabus suggestions that the
     student must confirm; manual entry always works. See `docs/specs/class-schedule.md`.
+11. Courses (`/courses`, `/courses/[courseId]`, `/api/course-catalog`, `/api/courses/{id}/details`): a per-course home page built from
+    saved data plus Priorities. See `docs/specs/courses.md`.
 
 Do not assume that course-content ingestion, file processing, RAG, priority scoring, study-plan generation, class-schedule extraction, or AI-agent functionality is implemented unless the relevant code exists in the current working tree.
 

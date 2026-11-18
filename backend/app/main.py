@@ -21,6 +21,7 @@ from backend.app import priority_service
 from backend.app import visual_document_service
 from backend.app import openai_key_service
 from backend.app import schedule_service
+from backend.app import course_overview_service
 from starlette.concurrency import run_in_threadpool
 from backend.app import rag_service
 from backend.app import retention_service
@@ -284,6 +285,18 @@ def restore_schedule_suggestions(course_id: int = Path(gt=0)):
         store.delete_dismissed_suggestions(course_id)
     _schedule_call(restore)
     return {'ok': True}
+
+
+@app.get('/api/course-catalog')
+def course_catalog():
+    """Per-course summaries for the Courses page. Saved data only."""
+    return _schedule_call(course_overview_service.build_catalog)
+
+
+@app.get('/api/courses/{course_id}/details')
+def course_details(course_id: int = Path(gt=0)):
+    """Saved announcements, modules, counts and Canvas links for one course page."""
+    return _schedule_call(lambda store: course_overview_service.build_details(store, course_id))
 
 
 @app.get('/api/openai-key')

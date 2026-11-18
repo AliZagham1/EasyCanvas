@@ -76,6 +76,16 @@ export default function StudyAssistantPage() {
       if (historyRequest.current === controller) { historyRequest.current = null; setHistoryLoading(false); }
     }
   }
+  // Linked from a course page ("?course=ID"): open that course, but only if it really is one of the loaded courses.
+  useEffect(() => {
+    if (coursesLoading || !courses.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("course");
+    if (!wanted || !courses.some((course) => String(course.id) === wanted)) return;
+    const timer = setTimeout(() => void openConversation(wanted), 0);
+    return () => clearTimeout(timer);
+    // Only when the course list arrives; later changes to the course dropdown must not be overridden.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courses, coursesLoading]);
   function update(id: string, patch: Partial<ChatTurn>) {
     setTurns((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
   }

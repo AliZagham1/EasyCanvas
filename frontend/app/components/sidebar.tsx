@@ -4,9 +4,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 
-const links = [
+type NavLink = { href: string; label: string; path: string; disabled?: boolean };
+
+const links: NavLink[] = [
   { href: "/", label: "Dashboard", path: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z" },
-  { href: "/courses", disabled: true, label: "Courses", path: "M12 5v15 M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Z" },
+  { href: "/courses", label: "Courses", path: "M12 5v15 M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Z" },
   { href: "/upcoming", label: "Upcoming", path: "M7 3v4 M17 3v4 M3 10h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M7 14h3 M7 17h6" },
   { href: "/priorities", label: "Priorities", path: "M5 21V4 M5 4c4-4 10 4 14 0v10c-4 4-10-4-14 0" },
   { href: "/class-schedule", label: "Class Schedule", path: "M7 3v4 M17 3v4 M3 10h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M8 14h3v3H8z M15 14h2" },
@@ -50,7 +52,7 @@ export default function Sidebar() {
               key={href}
               href={href}
               aria-current={pathname === href ? "page" : undefined}
-              className={`nav-link ${pathname === href ? "nav-link-active" : ""}`}
+              className={`nav-link ${pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "nav-link-active" : ""}`}
             >
               {content}
             </Link>
