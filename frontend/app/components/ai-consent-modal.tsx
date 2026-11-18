@@ -61,7 +61,7 @@ export default function AIConsentModal({ firstVisit, onDecide, onClose }: {
     {error && <p role="alert" className="conversation-dialog-error">{error}</p>}
     <div className="conversation-dialog-footer">
       <button type="button" className="primary-button" disabled={pending} onClick={() => void choose("declined")}>Not Now</button>
-      <button type="button" className="primary-button" disabled={pending} onClick={() => void choose("granted")}>Agree &amp; Continue</button>
+      <button type="button" className="primary-button btn-primary" disabled={pending} onClick={() => void choose("granted")}>Agree &amp; Continue</button>
     </div>
     <p className="assistant-hint consent-footnote">Not Now: continue without AI.</p>
   </dialog>;

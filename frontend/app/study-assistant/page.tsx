@@ -193,7 +193,7 @@ export default function StudyAssistantPage() {
         <p>Enable AI features to get beginner-friendly explanations of assignments, lecture materials, and study topics.</p>
         {gate === "unavailable"
           ? <><p role="alert">AI settings could not be loaded, so AI stays off.</p><button type="button" className="primary-button" onClick={() => void refresh()}>Retry</button></>
-          : <button type="button" className="primary-button" onClick={openConsent}>Enable AI Features</button>}
+          : <button type="button" className="primary-button btn-primary" onClick={openConsent}>Enable AI Features</button>}
       </div>
     </div>;
   }

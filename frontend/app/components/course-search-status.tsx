@@ -10,7 +10,7 @@ export default function CourseSearchStatus({ courseId }: { courseId: number }) {
   if (gate === "loading") return null;
   if (gate !== "enabled") return <div className="course-search-status">
     <p role="status">Course search is off because AI features are disabled.</p>
-    {gate === "disabled" && <button type="button" className="primary-button" onClick={openConsent}>Enable AI Features</button>}
+    {gate === "disabled" && <button type="button" className="primary-button btn-primary" onClick={openConsent}>Enable AI Features</button>}
   </div>;
   return <CourseSearchStatusEnabled courseId={courseId} />;
 }

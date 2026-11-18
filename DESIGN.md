@@ -1,166 +1,89 @@
 ---
 name: EasyCanvas
-description: "A calm academic workspace grounded in real Canvas coursework."
+description: "A quiet, dense, near-monochrome workspace for real Canvas coursework."
 colors:
-  background: "#fbfbfd"
-  foreground: "#191b25"
+  background: "#ffffff"
+  foreground: "#16181d"
+  foreground-secondary: "#3f4452"
   surface: "#ffffff"
-  border: "#e1e4ec"
-  muted: "#616879"
-  accent: "#6941c6"
-  accent-soft: "#eee9fb"
-  sidebar: "#f6f6fa"
-  table-heading: "#f5f6f9"
-  row-hover: "#faf9fd"
-  navigation-text: "#454b5d"
-  navigation-hover: "#eeeff5"
-  soon-border: "#d9dce6"
+  border: "#e6e7ec"
+  border-strong: "#cdd0d9"
+  control-border: "#858a99"
+  muted: "#5b6270"
+  accent: "#4f46e5"
+  accent-hover: "#4338ca"
+  accent-soft: "#eef0ff"
+  sidebar: "#fafafb"
+  table-heading: "#f7f7f9"
+  row-hover: "#f6f6f9"
+  nav-hover: "#efeff3"
+  danger: "#b42318"
+  danger-hover: "#912018"
   course-default: "#8975be"
   course-blue: "#668bb9"
   course-green: "#64958a"
   course-amber: "#a78b5a"
 typography:
-  headline:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "38px"
-    fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.035em"
-  headline-tablet:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "34px"
-    fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.035em"
-  headline-mobile:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "28px"
-    fontWeight: 700
-    lineHeight: 1.2
-    letterSpacing: "-0.035em"
-  summary:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "32px"
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "-0.025em"
-  section-title:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "20px"
-    fontWeight: 650
-    lineHeight: 1.4
-    letterSpacing: "-0.025em"
-  body:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "14px"
-    fontWeight: 400
-  table-body:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "15px"
-    fontWeight: 400
-    lineHeight: 1.5
-  assignment-title:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "15px"
-    fontWeight: 450
-    lineHeight: 1.5
-  description:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "16px"
-    fontWeight: 400
-    lineHeight: 1.5
-  metadata:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "13px"
-    fontWeight: 400
-    lineHeight: 1.5
-  button-label:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "13px"
-    fontWeight: 500
-    lineHeight: 1.5
-  navigation:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "14px"
-    fontWeight: 450
-    lineHeight: 1.5
-  navigation-active:
-    fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
-    fontSize: "14px"
-    fontWeight: 550
-    lineHeight: 1.5
+  fontFamily: "Inter, \"Helvetica Neue\", Arial, sans-serif"
+  page-title: { fontSize: "20px", fontWeight: 600, lineHeight: 1.3, letterSpacing: "-0.015em" }
+  summary-value: { fontSize: "24px", fontWeight: 600, lineHeight: 1.25, letterSpacing: "-0.02em" }
+  section-title: { fontSize: "16px", fontWeight: 600, lineHeight: 1.4, letterSpacing: "-0.01em" }
+  body: { fontSize: "14px", fontWeight: 400, lineHeight: 1.5 }
+  reading: { fontSize: "15px", fontWeight: 400, lineHeight: 1.8 }
+  secondary: { fontSize: "13px", fontWeight: 400, lineHeight: 1.5 }
+  meta: { fontSize: "12px", fontWeight: 500, lineHeight: 1.5 }
+  button-label: { fontSize: "13px", fontWeight: 500, lineHeight: 1.5 }
+  navigation: { fontSize: "14px", fontWeight: 500, lineHeight: 1.5 }
 rounded:
-  "surface": "8px"
-  "navigation": "8px"
-  "control": "6px"
-  "small-label": "4px"
+  sm: "4px"
+  md: "6px"
+  lg: "8px"
 spacing:
-  "4": "4px"
-  "8": "8px"
-  "12": "12px"
-  "16": "16px"
-  "20": "20px"
-  "24": "24px"
-  "28": "28px"
-  "32": "32px"
-  "36": "36px"
-  "40": "40px"
+  "1": "4px"
+  "2": "8px"
+  "3": "12px"
+  "4": "16px"
+  "5": "20px"
+  "6": "24px"
+  "8": "32px"
+sizing:
+  control-height: "32px (44px on phones)"
+  sidebar-width: "224px (208px at 768-1100px)"
+  page-max-width: "1200px"
+  page-gutter: "32px (24px tablet, 16px phone)"
 components:
-  button-primary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.navigation-text}"
-    typography: "{typography.button-label}"
-    rounded: "{rounded.control}"
-    padding: "9px 14px"
-  button-primary-hover:
-    backgroundColor: "{colors.table-heading}"
-  navigation:
-    textColor: "{colors.navigation-text}"
-    typography: "{typography.navigation}"
-    rounded: "{rounded.navigation}"
-    padding: "11px 12px"
-  navigation-active:
-    backgroundColor: "{colors.accent-soft}"
-    textColor: "{colors.accent}"
-    typography: "{typography.navigation-active}"
-  coursework-panel:
-    backgroundColor: "{colors.surface}"
-    rounded: "{rounded.surface}"
-  panel-header:
-    padding: "16px 20px"
-  summary-cell:
-    padding: "0 24px"
-  coverage-notice:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.control}"
-    padding: "12px 16px"
-  table-heading:
-    backgroundColor: "{colors.table-heading}"
-    textColor: "{colors.muted}"
-    padding: "10px 20px"
-  table-cell:
-    typography: "{typography.table-body}"
-    padding: "12px 20px"
+  button-secondary: { backgroundColor: "{colors.surface}", textColor: "{colors.foreground}", border: "{colors.border-strong}", rounded: "{rounded.md}", height: "32px" }
+  button-primary: { backgroundColor: "{colors.accent}", textColor: "#ffffff", rounded: "{rounded.md}", height: "32px" }
+  button-danger: { backgroundColor: "{colors.danger}", textColor: "#ffffff", rounded: "{rounded.md}", height: "32px" }
+  navigation: { textColor: "{colors.foreground-secondary}", typography: "{typography.navigation}", rounded: "{rounded.md}", height: "32px" }
+  navigation-active: { backgroundColor: "{colors.accent-soft}", textColor: "{colors.accent-hover}" }
+  coursework-panel: { backgroundColor: "{colors.surface}", border: "{colors.border}", rounded: "{rounded.lg}" }
+  table-heading: { backgroundColor: "{colors.table-heading}", textColor: "{colors.muted}", padding: "8px 16px" }
+  table-cell: { padding: "10px 16px" }
 ---
 
 # Design System: EasyCanvas
 
 ## Overview
 
-**Creative North Star: "The Academic Workspace"**
+**Creative North Star: "The Quiet Workspace"**
 
-EasyCanvas is a calm, focused academic productivity interface. White and very light neutral surfaces, subtle borders, and restrained lavender navigation keep real coursework prominent. Professional Inter typography and compact tables make courses, assignments, and whole deadlines easy to scan.
+EasyCanvas is a dense, calm, near-monochrome tool for understanding coursework. It takes cues from Linear, Notion and Vercel (clean type, hairline borders, compact rows, one restrained accent) without copying any of them. Real Canvas data is the visual subject; the interface stays out of its way.
 
-The latest user-supplied academic dashboard reference supersedes the earlier pricing-page theme. This system records durable visual rules from the current source, while `PRODUCT.md` and `AGENTS.md` remain the authority for product behavior and architecture.
+This file records the approved visual system (light theme). `PRODUCT.md` and `AGENTS.md` remain the authority for product behavior and architecture.
 
 **Key Characteristics:**
 
-- White and very light neutral surfaces with subtle borders.
-- Locally served Inter with a clear professional hierarchy.
-- Lavender active navigation and restrained purple links.
-- Flat panels without shadows or gradients.
-- Semantic coursework tables with explicit data states.
+- White surfaces, hairline borders, no shadows, no gradients, no decorative color.
+- One indigo accent, used only for the primary action, the active page and keyboard focus.
+- Small, disciplined type: page titles are 20px, not display-sized.
+- Compact rows (about 40px) and a 4px spacing grid.
+- Semantic tables with explicit data states.
+- Dark mode is deliberately deferred.
+
+### Rollout status
+
+The visual system is being applied incrementally. **Phase 1 (done):** tokens, type scale, buttons, page headers, desktop sidebar and mobile navigation. **Phase 2 (next):** Dashboard and Priorities page layouts. The page-specific sections further down (Dashboard, Courses, Upcoming, Priorities, Class Schedule, Study Assistant) still describe the earlier page layouts and will be revised as each page is redesigned; where they conflict with the foundation rules above and below, the foundation rules win.
 
 ### Purpose
 
@@ -191,29 +114,31 @@ The visual design should support the product's core promise:
 
 ### Design Inspiration
 
-The latest user-approved reference is a flat academic dashboard: white or very light neutral backgrounds, subtle borders instead of shadows, no gradients, calm professional typography, and a lavender active sidebar. This direction supersedes the earlier blue-gray pricing theme.
+Linear, Notion and Vercel: clean typography, restrained color, compact scannable layouts and consistent components. Do not copy their branding or layouts. Avoid excessive cards, shadows, colored stripes, oversized headings, gradients and decorative elements.
 
-Keep the existing EasyCanvas brand assets and seven navigation labels. The current expression uses three compact summary regions with vertical dividers, a bordered Upcoming table, and a bordered Courses roster. It does not authorize new product capabilities or invented academic data.
-
-The image has no local copy in this repository. This record is grounded in the current source and the supplied description; rendered comparison remains pending.
+Keep the existing EasyCanvas logo files in their original colors and the seven navigation labels. This direction does not authorize new product capabilities or invented academic data.
 
 ## Colors
 
-The palette pairs white and very light neutral surfaces with dark readable type and a restrained lavender interaction accent. The frontmatter carries the exact source colors.
+The palette pairs white and barely-tinted neutral surfaces with dark readable type and one restrained indigo accent. The frontmatter carries the exact values.
 
 ### Primary
 
-Purple (`accent`) marks links, focus, and active navigation text. Pale lavender (`accent-soft`) supplies active navigation fill and text selection. Routine buttons remain white with a subtle border and muted dark text.
+Indigo (`accent`, `#4f46e5`) is used for exactly three things: the one filled primary action in a view, the active navigation item (as `accent-soft` fill with `accent-hover` text), and keyboard focus rings. It is not used for body links, list titles, badges or decoration. Text links are neutral (`foreground`) with a hairline underline that darkens on hover.
 
 ### Neutral
 
-The very light `background` surrounds white `surface` panels. `sidebar` separates navigation; `table-heading` distinguishes column labels. `foreground` carries primary text, `muted` secondary text, and `border` divides panels, rows, and summary regions. Hover colors are quiet local state variations.
+`background` and `surface` are white. `sidebar`, `table-heading` and `row-hover` are barely tinted greys. `foreground` carries primary text, `foreground-secondary` navigation and secondary controls, `muted` supporting text (6.1:1 on white). `border` (hairline) divides panels, rows and regions; `border-strong` outlines buttons; `control-border` outlines form controls and meets 3:1 against white (WCAG 1.4.11). Hover colors are quiet local state changes.
+
+### Semantic
+
+`danger` (red) means overdue, missing, error or a destructive action. Amber is reserved for "due soon" and is not yet tokenised. Green means confirmed or done. Color is never the only signal.
 
 ### Course identification
 
-The default, blue, green, and amber course colors belong to small identity dots. They are not priority scores or semantic success/warning states.
+The default, blue, green, and amber course colors belong to small identity dots only. They are not priority scores or semantic states. Left-edge color stripes on rows and cards are being removed page by page (Phase 2 onward) because they are mistaken for severity.
 
-**The Quiet Accent Rule.** Use the restrained purple accent for links and focus, and a pale lavender fill for active navigation. Keep routine controls neutral.
+**The Quiet Accent Rule.** One indigo accent, three jobs: primary action, active page, focus. Everything else is neutral.
 
 ### Color System
 
@@ -233,7 +158,7 @@ Use neutral colors for:
 
 #### Primary accent
 
-Use the restrained purple accent for links and keyboard focus, with pale lavender selected navigation and text selection. Keep routine buttons neutral.
+Indigo for the primary action, active navigation and focus only. Routine buttons stay neutral.
 
 Do not use the accent color on every component.
 
@@ -267,17 +192,11 @@ Course colors should help recognition, not dominate the interface.
 
 **Application Font:** Locally served Inter variable, with Helvetica Neue, Arial, and sans-serif fallbacks. `--font-inter` is configured with `next/font/local`; weights span 100–900.
 
-### Observed hierarchy
+### Type scale
 
-- **Headline:** Page titles use 38px on desktop, 34px at tablet widths, and 28px on mobile.
-- **Summary:** Tabular counts use 32px, falling to 28px on mobile; unavailable values retain a 16px state treatment.
-- **Section title:** 20px group headings become 18px on mobile.
-- **Table body:** 15px coursework text, with assignment titles at weight 450 and course codes at 500.
-- **Body and description:** The application default is 14px; page descriptions use 16px, becoming 14px on mobile.
-- **Metadata:** 13px for table headings, supporting course information, points, and notes.
-- **Navigation and controls:** 14px navigation uses weight 450, active items 550; routine buttons use 13px medium text.
+Inter only. Sizes: **12** meta and table headings, **13** secondary text and buttons, **14** body, tables and navigation, **15** long-form reading (assistant answers), **16** section titles, **20** page titles, **24** summary numbers. Weights: **400, 500, 600** only (no half-steps). Tabular numerals for dates and counts. Page titles use -0.015em tracking; nothing uses heavy negative tracking. Page descriptions are 13px `muted`.
 
-Do not add a separate display or decorative monospace voice. Tabular numerals support dates and summary values. There is no Workspace eyebrow or heading kicker.
+Phones keep the same sizes; control and navigation heights grow instead (see Layout). Do not add a decorative or monospace display voice.
 
 ### Typography
 
@@ -307,15 +226,11 @@ Typography should do more of the hierarchy work so color does not have to.
 
 ## Layout
 
-### Observed grid and breakpoints
+### Grid, spacing and breakpoints
 
-The desktop shell fills `100dvh` with a persistent 248px sidebar and independently scrolling main area. Main content is centered at a maximum width of 1320px with 40px vertical and 36px horizontal padding. The compact summary strip uses columns in a 1 / 1.1 / 1.7 ratio, with vertical dividers rather than separate cards. Bordered coursework panels follow with 20px separation.
+A 4px grid with the scale 4, 8, 12, 16, 20, 24, 32 (`--space-*`). The desktop shell fills `100dvh` with a 224px sidebar and an independently scrolling main area; content is centered at a maximum of 1200px with 24px vertical and 32px horizontal padding. Page headers are one compact block (20px title, optional 13px description) with actions on the right and 20px below. Panels are separated by 16px. Table rows are about 40px (10px/16px cell padding).
 
-At 768–1100px, the sidebar becomes 220px, page padding becomes 32px 24px, and the title becomes 34px. At 767px and below, the sidebar becomes a top navigation region with horizontally scrolling labels; page padding becomes 24px 16px and the title 28px.
-
-Responsive coursework responds to the available main-content container: at 760px and below, the final deadline region spans both summary columns below a horizontal divider. At 720px and below, tables become labelled stacked rows; headers remain accessible and explicit table/row/cell roles are preserved. Keep whole dates visible rather than truncating them.
-
-The dashboard shows the three summary regions, a full-width five-assignment table with `View all upcoming`, then a three-column course roster. Upcoming shares the actual `AssignmentTable` component and displays every upcoming assignment with points metadata. The assignment columns are Course / Assignment / Due Date (20% / 44% / 36%); the course roster is Course / Name / Upcoming (22% / 54% / 24%). These are the current surface expressions, not a template for every future page.
+At 768 to 1100px the sidebar is 208px and the gutter 24px. At 767px and below the sidebar becomes a 56px top bar with a **Menu** button that opens the full list of seven destinations as an overlay; the gutter is 16px and every interactive control is at least 44px tall. Container queries still reflow tables to labelled stacked rows at 720px; a denser two-line mobile row pattern is planned with the Dashboard and Priorities redesign.
 
 ### Overall Layout
 
@@ -402,23 +317,17 @@ The interface is flat: no shadows or gradients. White panels are separated from 
 
 ### Borders, Radius, and Shadows
 
-Use white coursework panels with subtle one-pixel borders and `rounded.surface` corners. Navigation uses the same compact corner scale; routine buttons and notices use `rounded.control`; disabled `Soon` labels use `rounded.small-label`.
-
-Summary regions are unboxed and separated by rules. Tables use horizontal row borders. Course identity dots remain circular and compact (8px). Do not wrap summary regions or individual assignments in separate floating cards.
-
-The latest user direction requires flat surfaces without gradients or shadows. Avoid extreme pill shapes for normal containers and multiple nested rounded containers.
+Three radii only: **4px** (small labels), **6px** (buttons, controls, notices, nav items), **8px** (panels and dialogs). Pills (999px) and circles are limited to course dots, switches and badges. One-pixel hairline borders; no shadows or gradients. Do not nest rounded containers or wrap every region in a card.
 
 ## Components
 
 ### Observed shared patterns
 
-Routine buttons use white fill, a subtle border, 13px medium dark text, and a lightly tinted hover state. Navigation uses consistent authored SVG strokes (20px boxes), lavender active fill with purple text, quiet neutral hover fill, and explicit disabled labels. Reuse the original EasyCanvas logo files in their original purple, coral, and teal colors without a grayscale filter. The brand leads directly into navigation without a Workspace eyebrow.
+**Buttons** are 32px tall (44px on phones), 13px/500, 6px radius. Variants: **secondary** (white, `border-strong`; the original `.primary-button` class, kept for compatibility), **primary** (`.btn-primary`, filled indigo; at most one per view), **ghost** (`.btn-ghost`) and **danger** (`.btn-danger`). Disabled buttons use a grey fill and `muted` text. **Form controls** share the 32px height, 6px radius, `control-border` and a 2px indigo focus ring. **Text links** are neutral with a hairline underline.
 
-`AssignmentTable` is a shared presentation component: it receives assignments, an accessible caption, and optional points visibility. Pages keep responsibility for fetching, status messages, and the five-item dashboard preview. `formatCourseCode` supplies the shared readable course label while retaining unfamiliar Canvas formats. Neither changes the source of academic facts.
+`AssignmentTable` is the shared presentation component for assignment rows; `formatCourseCode` supplies the readable course label. Pages keep responsibility for fetching and status messages.
 
-The Coursework panel is a white bordered container with an 8px radius. Its header uses compact padding, with a pale table-header band below. Rows show separate course, assignment, and due-date fields. The course roster shares the table styling, stable Canvas course IDs, and small course identity dots. Counts and existing disabled View text remain visible. At narrow container widths, labelled rows retain table semantics and full dates. Coverage notices use a subtle border and readable neutral copy. The implemented UI has no input component or generic tag system to extract.
-
-Links and buttons use a 2px purple focus outline offset by 3px; state transitions last 150ms and respect reduced motion. Selection uses pale lavender; the scrolling main area uses a thin neutral scrollbar.
+Focus is a 2px indigo outline offset 2px on every interactive element, including selects, inputs, summaries and buttons. Transitions last 150ms and respect reduced motion. Reuse the original EasyCanvas logo files without a grayscale filter.
 
 ### Sidebar
 
@@ -438,12 +347,15 @@ Rules:
 
 - Keep the sidebar visually stable across pages.
 - Make the active route obvious but restrained.
-- Use a lavender fill and purple text for the active item; keep the other navigation states neutral.
+- Use a pale indigo fill (`accent-soft`) with `accent-hover` text for the active item; keep the other states neutral.
 - Use consistent icons.
 - Keep labels visible on normal desktop widths.
 - Do not use gradients as the default sidebar treatment.
 - Keep the seven existing labels. Unimplemented destinations remain visibly disabled with a `Soon` label; do not imply their features exist.
-- Avoid oversized branding that wastes vertical space.
+- Avoid oversized branding that wastes vertical space: a 24px mark and a 16px wordmark.
+- Desktop: 224px wide, 32px items, 16px icons, Settings set apart under a hairline directly after the page links (not pinned to the bottom).
+- Phones: a 56px top bar with a **Menu** button (`aria-expanded`, `aria-controls`). The panel lists all seven destinations in 48px rows, closes on Escape (focus returns to the button), on scrim click, and whenever the route changes.
+- Each destination has a distinct icon.
 
 The sidebar should feel like navigation, not decoration.
 
