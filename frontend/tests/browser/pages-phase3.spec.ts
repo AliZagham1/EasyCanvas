@@ -18,7 +18,7 @@ const task = (id: number, name: string, hours: number, points: number | null = 1
 
 test("Upcoming is chronological, grouped under one heading per day, with times and points", async ({ page }) => {
   await upcoming(page, [task(1, "Morning quiz", 20, 5), task(2, "Night lab", 45), task(3, "Later project", 80, null)]);
-  await expect(page.getByRole("heading", { name: "Upcoming Assignments" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upcoming", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: /All upcoming/ })).toContainText("3");
   const headings = page.locator(".work-group-title");
   await expect(headings).toHaveCount(3);

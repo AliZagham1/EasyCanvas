@@ -49,7 +49,7 @@ Errors are safe messages (422 for rules, 404 for unknown items, 503 when Canvas 
 
 ## UI
 `/study-plans` (sidebar: Study Plans): new plan (assignment or exam), steps with a length, Suggest times, review and Save, mark done,
-clear a time, delete. Saved, unfinished sessions appear as study blocks on the weekly Class Schedule grid for their date, and exam or other custom dates appear in its "Due" row with an Exam tag.
+clear a time, delete. Saved, unfinished sessions appear as study blocks on the weekly Class Schedule grid for their date, and exam or other custom dates appear in its "Due" row, on the Dashboard's Upcoming list and on the Upcoming page, each with an Exam tag.
 
 ## Limitations
 - No AI yet: the student writes the steps. The planned next stage is AI-suggested steps from the assignment and course material,
@@ -57,4 +57,4 @@ clear a time, delete. Saved, unfinished sessions appear as study blocks on the w
 - A step is one session in one gap (at most 4 hours); it is not split across days.
 - Steps cannot be reordered. A session is placed at one start time; it cannot be split.
 - Free time ignores everything except the weekly schedule and saved sessions (no holidays, work or personal events).
-- Exams are not read from Canvas; the student enters the date. They appear on the Class Schedule week but not on the Dashboard, Upcoming or Priorities (those show Canvas work only).
+- Exams are not read from Canvas; the student enters the date. They appear on the Class Schedule week, the Dashboard, Upcoming and the matching course page (with an Exam tag, linking to Study Plans), but not on Priorities, which ranks Canvas work by submission status that exams do not have.

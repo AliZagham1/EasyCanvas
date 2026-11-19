@@ -124,7 +124,7 @@ The palette pairs white and barely-tinted neutral surfaces with dark readable ty
 
 ### Primary
 
-Indigo (`accent`, `#4f46e5`) is used for exactly three things: the one filled primary action in a view, the active navigation item (as `accent-soft` fill with `accent-hover` text), and keyboard focus rings. It is not used for body links, list titles, badges or decoration. Text links are neutral (`foreground`) with a hairline underline that darkens on hover.
+Indigo (`accent`, `#4f46e5`) is used for four things: the one filled primary action in a view, the active navigation item (as `accent-soft` fill with `accent-hover` text), keyboard focus rings, and exam highlighting (a tinted `accent-soft` row, a filled "Exam" tag and an `accent-text` relative label, so exams stand out from assignments; amber and red stay reserved for due soon and overdue). It is not used for body links, list titles, badges or decoration. Text links are neutral (`foreground`) with a hairline underline that darkens on hover.
 
 ### Neutral
 
@@ -538,13 +538,13 @@ Do not place every feature on the dashboard.
 
 The dashboard should show a concise preview of upcoming work rather than duplicating the full Upcoming page. When a longer upcoming list exists elsewhere, prefer a short preview plus a clear action such as `View all upcoming`.
 
-Implemented layout (Phase 2): a one-line header, a three-number **stat strip** framed by hairlines (due within 24 hours, due in 1-3 days, all upcoming), then two columns. The wide left column is **Upcoming Assignments**: the next eight deadlines grouped by urgency (due within 24 hours, due in 1-3 days, later), each a `.work-row`, with `View all upcoming`. The 320px right column holds **Next class** and a compact **Courses** list (code, cleaned course name, upcoming count; each row links to the course page). Below 900px the columns stack with Next class first. There are no tables, cards or per-row course colors on the Dashboard. Overdue work is not shown here because the Dashboard still reads only the existing upcoming-assignments data; adding it means reading the Priorities data and is a separate decision.
+Implemented layout (Phase 2): a one-line header, a three-number **stat strip** framed by hairlines (due within 24 hours, due in 1-3 days, all upcoming), then two columns. The wide left column is **Upcoming Assignments**: the next eight deadlines grouped by urgency (due within 24 hours, due in 1-3 days, later), each a `.work-row`, with `View all upcoming`. The 320px right column holds **Next class** and a compact **Courses** list (code, cleaned course name, upcoming count; each row links to the course page). Below 900px the columns stack with Next class first. Exams entered in Study Plans are merged into this list as highlighted rows with a filled "Exam" tag (the title links to Study Plans, and the relative label reads "Tomorrow" or "In 3 days"); they count in the stat strip and in each course's upcoming count. There are no tables, cards or per-row course colors on the Dashboard. Overdue work is not shown here because the Dashboard still reads only the existing upcoming-assignments data; adding it means reading the Priorities data and is a separate decision.
 
 Avoid decorative dashboard widgets with no clear student value.
 
 ### Courses
 
-**Implemented layout (Phase 3):** the index is a list of rows, not cards: a course dot, the code and cleaned name, `materials` counts, the next class, and the workload (`1 overdue`, `1 due in the next 3 days`, `Nothing due`). Study Assistant readiness appears only when something is pending. The course page uses the same unboxed sections and `.work-row` assignment rows as Priorities, with `Ask the Study Assistant` as its one primary button.
+**Implemented layout (Phase 3):** the index is a list of rows, not cards: a course dot, the code and cleaned name, `materials` counts, the next class, and the workload (`1 overdue`, `1 due in the next 3 days`, `Nothing due`). Study Assistant readiness appears only when something is pending. The course page uses the same unboxed sections and `.work-row` assignment rows as Priorities, with an **Exams** section (that course's upcoming exams from Study Plans, highlighted rows with the Exam tag) above Assignments when there are any, with `Ask the Study Assistant` as its one primary button.
 
 
 Courses should provide a clear entry into course-specific context.
@@ -564,7 +564,7 @@ Course pages should not feel like unrelated mini-apps.
 
 ### Upcoming
 
-**Implemented layout (Phase 3):** one chronological list grouped under a heading per calendar day (`Thursday, Nov 19 · Tomorrow`). A row shows the title, `course · points` and the time of day; the full date and zone are in the tooltip. Missing points read "Points unavailable". Upcoming stays a chronological view; Priorities owns urgency and status.
+**Implemented layout (Phase 3):** one chronological list grouped under a heading per calendar day (`Thursday, Nov 19 · Tomorrow`). A row shows the title, `course · points` and the time of day; the full date and zone are in the tooltip. Missing points read "Points unavailable". Exams entered in Study Plans appear under their day with the Exam tag and no points. Upcoming stays a chronological view; Priorities owns urgency and status and does not list exams.
 
 
 Upcoming should be optimized for scanning.
