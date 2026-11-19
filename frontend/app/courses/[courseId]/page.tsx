@@ -5,14 +5,16 @@ import { useParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { formatCourseCode } from "@/lib/course-label";
-import { getCourseAccent } from "@/lib/coursework";
+import { formatDueDate, formatDueShort, getCourseAccent } from "@/lib/coursework";
 import { NotFoundError, formatPosted, formatSynced, getCourseDetails, materialsSummary, plural } from "@/lib/courses";
 import type { CourseDetails } from "@/lib/courses";
-import { buildPriorityView, getPriorities } from "@/lib/priorities";
+import { buildPriorityView, describeDay, getPriorities, resolveTimeZone } from "@/lib/priorities";
 import type { PriorityItem, RankedItem } from "@/lib/priorities";
 import { compactSearchStatus, getSearchCourses } from "@/lib/search-index";
 import type { CourseIndex } from "@/lib/search-index";
 import { KIND_LABEL, courseTitle, formatDays, formatRange } from "@/lib/schedule";
+import { examItems, getPlans } from "@/lib/study-plans";
+import type { StudyPlan } from "@/lib/study-plans";
 import NextClassCard from "../../components/next-class-card";
 import PriorityCard from "../../components/priority-card";
 
@@ -35,6 +37,7 @@ function CourseView() {
   const [assignments, setAssignments] = useState<PriorityItem[] | null>(null);
   const [assignmentsFailed, setAssignmentsFailed] = useState(false);
   const [readiness, setReadiness] = useState<CourseIndex | null>(null);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState(false);
@@ -47,8 +50,9 @@ function CourseView() {
     if (!validId) return;
     const controller = new AbortController();
     async function load() {
-      const [detail, priorities, search] = await Promise.allSettled([
+      const [detail, priorities, search, studyPlans] = await Promise.allSettled([
         getCourseDetails(courseId, controller.signal), getPriorities({ signal: controller.signal }), getSearchCourses(controller.signal),
+        getPlans(controller.signal),          // optional: exams the student entered; without them the page is unchanged
       ]);
       if (controller.signal.aborted) return;
       if (detail.status === "fulfilled") {
@@ -66,6 +70,7 @@ function CourseView() {
       } else {
         setAssignmentsFailed(true);
       }
+      if (studyPlans.status === "fulfilled") setPlans(studyPlans.value.plans);
       if (search.status === "fulfilled") setReadiness(search.value.courses.find((entry) => entry.course_id === courseId) ?? null);
       setLoading(false);
     }
@@ -78,6 +83,8 @@ function CourseView() {
     [assignments, courseId, now, showClosed],
   );
   const hiddenCount = view.counts.completed;
+  const zone = useMemo(() => resolveTimeZone(), []);
+  const exams = useMemo(() => examItems(plans, now).filter((exam) => exam.courseId === courseId), [plans, now, courseId]);
 
   if (validId && loading) return <div className="page-content"><p className="list-message" role="status">Loading course...</p></div>;
   if (!validId || notFound) {
@@ -134,6 +141,31 @@ function CourseView() {
           </div>
         ))}
       </dl>
+
+      {exams.length > 0 && (
+        <section className="work-section" aria-labelledby="course-exams">
+          <div className="work-section-head">
+            <h2 id="course-exams" className="section-title">Exams <span className="priority-count">{exams.length}</span></h2>
+            <span className="panel-note">From Study Plans</span>
+          </div>
+          <ul className="work-list">
+            {exams.map((exam) => (
+              <li key={exam.key} className="work-row is-exam">
+                <div className="work-main">
+                  <span className="work-title-line">
+                    <Link href="/study-plans" className="work-title work-title-link">{exam.title}</Link>
+                    <span className="due-tag">Exam</span>
+                  </span>
+                </div>
+                <div className="work-due">
+                  <time dateTime={exam.dueAt} title={formatDueDate(exam.dueAt)}>{formatDueShort(exam.dueAt, now)}</time>
+                  <span className="work-relative">{describeDay(Date.parse(exam.dueAt), now, zone)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="work-section" aria-labelledby="course-assignments">
         <div className="work-section-head">

@@ -7,8 +7,10 @@ import { getCourses, getUpcomingAssignments, formatDueDate, formatDueShort, getC
 import type { Course, Assignment } from "@/lib/coursework";
 import { formatCourseCode } from "@/lib/course-label";
 import NextClassCard from "./components/next-class-card";
-import { describeDue, resolveTimeZone, urgencyBucket } from "@/lib/priorities";
+import { describeDay, describeDue, resolveTimeZone, urgencyBucket } from "@/lib/priorities";
 import { courseTitle } from "@/lib/schedule";
+import { examItems, getPlans } from "@/lib/study-plans";
+import type { StudyPlan } from "@/lib/study-plans";
 import { useCourseSync } from "@/lib/use-course-sync";
 
 const PREVIEW = 8;
@@ -28,6 +30,7 @@ export default function Home() {
   const [failedCourseIds, setFailedCourseIds] = useState<number[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [now, setNow] = useState(0);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const syncCompleted = useCallback(() => {
     setCoursesLoading(true);
     setIsLoading(true);
@@ -71,8 +74,21 @@ export default function Home() {
     return () => controller.abort();
   }, [refreshVersion]);
 
+  // Exams and other dates entered in Study Plans. Optional: without them the list is just Canvas assignments.
+  useEffect(() => {
+    const controller = new AbortController();
+    getPlans(controller.signal).then((payload) => { if (!controller.signal.aborted) setPlans(payload.plans); }).catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  /** Assignments and exams in one list, earliest first. */
+  const rows = useMemo(() => [
+    ...assignments.map((a) => ({ key: `${a.course_id}-${a.id}`, title: a.name, courseId: a.course_id, course: formatCourseCode(a.course_code), courseTitle: a.course_code, dueAt: a.due_at, exam: false })),
+    ...examItems(plans, now).map((e) => ({ key: e.key, title: e.title, courseId: e.courseId, course: formatCourseCode(e.courseCode, e.courseName || "Course"), courseTitle: e.courseCode ?? "", dueAt: e.dueAt, exam: true })),
+  ].sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt)), [assignments, plans, now]);
+
   function getUpcomingCount(courseId: number) {
-    return assignments.filter((assignment) => assignment.course_id === courseId).length;
+    return rows.filter((row) => row.courseId === courseId).length;
   }
 
   const assignmentsUnavailable = hasError || (courses.length > 0 && failedCourseIds.length === courses.length);
@@ -83,12 +99,12 @@ export default function Home() {
   const zone = useMemo(() => resolveTimeZone(), []);
   const grouped = useMemo(() => URGENCY_GROUPS.map((group) => ({
     ...group,
-    items: now === 0 ? [] : assignments.slice(0, PREVIEW).filter((a) => urgencyBucket(Date.parse(a.due_at), now) === group.key),
-  })).filter((group) => group.items.length > 0), [assignments, now]);
+    items: now === 0 ? [] : rows.slice(0, PREVIEW).filter((row) => urgencyBucket(Date.parse(row.dueAt), now) === group.key),
+  })).filter((group) => group.items.length > 0), [rows, now]);
   const counts = useMemo(() => ({
-    soon: assignments.filter((a) => urgencyBucket(Date.parse(a.due_at), now) === "soon").length,
-    next: assignments.filter((a) => urgencyBucket(Date.parse(a.due_at), now) === "next").length,
-  }), [assignments, now]);
+    soon: rows.filter((row) => urgencyBucket(Date.parse(row.dueAt), now) === "soon").length,
+    next: rows.filter((row) => urgencyBucket(Date.parse(row.dueAt), now) === "next").length,
+  }), [rows, now]);
   const statValue = (value: number) => isLoading || now === 0 ? "..." : assignmentsUnavailable ? "Unavailable" : value;
 
   return (
@@ -120,7 +136,7 @@ export default function Home() {
         <div className="stat">
           <dt className="summary-label">All upcoming</dt>
           <dd className={`summary-value${assignmentsUnavailable ? " summary-state" : ""}`}>
-            {isLoading ? "..." : assignmentsUnavailable ? "Unavailable" : assignments.length}
+            {isLoading ? "..." : assignmentsUnavailable ? "Unavailable" : rows.length}
             {!isLoading && !assignmentsUnavailable && hasPartialCoverage && <span className="summary-qualifier"> (partial)</span>}
           </dd>
         </div>
@@ -136,7 +152,7 @@ export default function Home() {
       <div className="dashboard-grid">
         <section className="work-section dashboard-upcoming" aria-labelledby="upcoming-title" aria-busy={isLoading}>
           <div className="work-section-head">
-            <h2 id="upcoming-title" className="section-title">Upcoming Assignments</h2>
+            <h2 id="upcoming-title" className="section-title">Upcoming</h2>
             <Link href="/upcoming" className="primary-button btn-sm button-link">
               View all upcoming
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
@@ -148,7 +164,7 @@ export default function Home() {
             <p className="list-message" role="status">Loading upcoming assignments...</p>
           ) : assignmentsUnavailable ? (
             <p className="list-message" role="alert">Unable to load upcoming assignments. Reload this page to try again.</p>
-          ) : assignments.length === 0 ? (
+          ) : rows.length === 0 ? (
             <p className="list-message">{hasPartialCoverage ? "No upcoming assignments in loaded courses. Other courses are unavailable." : "No upcoming assignments found."}</p>
           ) : (
             <>
@@ -156,22 +172,25 @@ export default function Home() {
                 <div key={group.key} role="group" aria-labelledby={`group-${group.key}`}>
                   <h3 id={`group-${group.key}`} className="work-group-title">{group.title}</h3>
                   <ul className="work-list">
-                    {group.items.map((assignment) => (
-                      <li key={`${assignment.course_id}-${assignment.id}`} className="work-row">
+                    {group.items.map((row) => (
+                      <li key={row.key} className={`work-row${row.exam ? " is-exam" : ""}`}>
                         <div className="work-main">
-                          <span className="work-title">{assignment.name}</span>
-                          <p className="work-meta" title={assignment.course_code}>{formatCourseCode(assignment.course_code)}</p>
+                          <span className="work-title-line">
+                            {row.exam ? <Link href="/study-plans" className="work-title work-title-link">{row.title}</Link> : <span className="work-title">{row.title}</span>}
+                            {row.exam && <span className="due-tag">Exam</span>}
+                          </span>
+                          <p className="work-meta" title={row.courseTitle}>{row.course}</p>
                         </div>
                         <div className="work-due">
-                          <time dateTime={assignment.due_at} title={formatDueDate(assignment.due_at)}>{formatDueShort(assignment.due_at, now)}</time>
-                          <span className={`work-relative${group.key === "soon" ? " is-soon" : ""}`}>{describeDue(Date.parse(assignment.due_at), now, zone)}</span>
+                          <time dateTime={row.dueAt} title={formatDueDate(row.dueAt)}>{formatDueShort(row.dueAt, now)}</time>
+                          <span className={`work-relative${group.key === "soon" ? " is-soon" : ""}`}>{row.exam ? describeDay(Date.parse(row.dueAt), now, zone) : describeDue(Date.parse(row.dueAt), now, zone)}</span>
                         </div>
                       </li>
                     ))}
                   </ul>
                 </div>
               ))}
-              {assignments.length > PREVIEW && <p className="work-more">Showing the next {PREVIEW} of {assignments.length}.</p>}
+              {rows.length > PREVIEW && <p className="work-more">Showing the next {PREVIEW} of {rows.length}.</p>}
             </>
           )}
         </section>

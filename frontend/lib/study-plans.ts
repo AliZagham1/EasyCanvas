@@ -135,3 +135,14 @@ export function savedTimeMessage(result: Pick<ChosenTime, "replaced" | "overlaps
   if (result.overlaps.length) text += ` It overlaps ${result.overlaps.map((item) => item.title).join(" and ")}, which stays where it is.`;
   return text;
 }
+
+/** An exam or other date the student entered in Study Plans, in the shape the Dashboard and Upcoming lists need. */
+export type ExamItem = { key: string; title: string; courseId: number; courseCode: string | null; courseName: string | null; dueAt: string };
+
+/** Future custom plans only, earliest first. Assignment plans are left out because Canvas already supplies that deadline. */
+export function examItems(plans: Pick<StudyPlan, "plan_id" | "kind" | "title" | "course_id" | "course_code" | "course_name" | "due_at">[], nowMs: number): ExamItem[] {
+  return plans
+    .filter((plan) => plan.kind === "custom" && nowMs > 0 && Date.parse(plan.due_at) > nowMs)
+    .map((plan) => ({ key: `exam-${plan.plan_id}`, title: plan.title, courseId: plan.course_id, courseCode: plan.course_code, courseName: plan.course_name, dueAt: plan.due_at }))
+    .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt));
+}

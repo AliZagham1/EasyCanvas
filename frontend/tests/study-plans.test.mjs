@@ -92,3 +92,16 @@ test("a booked time (409 with conflicts) becomes a TimeConflict; other failures 
   const past = load({ fetch: async () => ({ ok: false, status: 422, json: async () => ({ detail: "That time has already passed." }) }) });
   await assert.rejects(past.setStepTime("p", "s", "x", true), /already passed/);
 });
+
+test("only future custom plans become exam items, earliest first", () => {
+  const { examItems } = load();
+  const plan = (id, kind, due, title = id) => ({ plan_id: id, kind, title, course_id: 1, course_code: "CSE 3302", course_name: "PL", due_at: due });
+  const now = Date.parse("2026-11-17T18:00:00Z");
+  const items = examItems([
+    plan("later", "custom", "2026-11-25T15:00:00Z"), plan("soon", "custom", "2026-11-19T15:00:00Z"), plan("past", "custom", "2026-11-16T15:00:00Z"),
+    plan("hw", "assignment", "2026-11-19T15:00:00Z"), plan("bad", "custom", "not a date"),
+  ], now);
+  assert.deepEqual(Array.from(items, (item) => item.key), ["exam-soon", "exam-later"]);
+  assert.equal(items[0].courseCode, "CSE 3302");
+  assert.deepEqual(Array.from(examItems([plan("x", "custom", "2026-11-25T15:00:00Z")], 0)), []);        // the clock is not known yet
+});
