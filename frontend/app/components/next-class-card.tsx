@@ -46,10 +46,10 @@ export default function NextClassCard({ courses: provided }: { courses?: Schedul
       ) : (
         <p className="next-class-title">
           {pending > 0 ? `${pending} class time${pending === 1 ? "" : "s"} found in your syllabi. ` : "Add your class times to see your next class. "}
-          <Link href="/class-schedule" className="text-link">{pending > 0 ? "Review them" : "Open Class Schedule"}</Link>
+          <Link href="/class-schedule" className="primary-button btn-sm button-link">{pending > 0 ? "Review them" : "Open Class Schedule"}</Link>
         </p>
       )}
-      {next && <Link href="/class-schedule" className="text-link">View schedule</Link>}
+      {next && <Link href="/class-schedule" className="primary-button btn-sm button-link">View schedule</Link>}
     </section>
   );
 }

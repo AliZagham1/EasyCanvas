@@ -341,7 +341,7 @@ Three radii only: **4px** (small labels), **6px** (buttons, controls, notices, n
 
 ### Observed shared patterns
 
-**Buttons** are 32px tall (44px on phones), 13px/500, 6px radius. Variants: **secondary** (white, `border-strong`; the original `.primary-button` class, kept for compatibility), **primary** (`.btn-primary`, filled indigo; at most one per view), **ghost** (`.btn-ghost`) and **danger** (`.btn-danger`). Disabled buttons use a grey fill and `muted` text. **Form controls** share the 32px height, 6px radius, `control-border` and a 2px indigo focus ring. **Text links** are neutral with a hairline underline.
+**Buttons** are 32px tall (44px on phones), 13px/500, 6px radius. Variants: **secondary** (white, `border-strong`; the original `.primary-button` class, kept for compatibility), **primary** (`.btn-primary`, filled indigo; at most one per view), **ghost** (`.btn-ghost`) and **danger** (`.btn-danger`). Disabled buttons use a grey fill and `muted` text. **Actions are buttons, not links.** Anything you click to do something (Change time, Clear time, Remove, Edit, Delete, Try again, Retry, Show all) and any stand-alone call to action (View schedule, View all upcoming, ← All courses) is a small bordered button (28px, 44px on phones); destructive ones use a red outline. Underlined text links are only for links inside a sentence, citations, and document or assignment titles. The borderless ghost style is not used for visible actions. **Form controls** share the 32px height, 6px radius, `control-border` and a 2px indigo focus ring. **Text links** are neutral with a hairline underline.
 
 `AssignmentTable` is the shared presentation component for assignment rows; `formatCourseCode` supplies the readable course label. Pages keep responsibility for fetching and status messages.
 
@@ -627,7 +627,9 @@ The schedule should eventually act as fixed unavailable time for study planning.
 
 ### Study Plans
 
-**Implemented layout:** one unboxed section per plan: the title, `course · Due date · relative`, a one-line summary (`3 steps · 1 done · 2 h 30 min left · 1 of 2 scheduled`), step rows in the shared `.work-row` pattern (checkbox, title and length on the left; the saved time or "Not scheduled", Clear time and Remove on the right), an add-step line, a bordered "Proposed times" panel with **Save these times** as its one primary action, then Suggest times and a two-step Delete plan. `New plan` is the page's one primary button. Each open step has a quiet **Pick time** / **Change time** link that opens an inline form (date, start, computed end). A booked time shows a warning panel listing what is there, with **Add anyway** as the primary action and **Choose another time**. Planning preferences sit in a collapsed section at the bottom.
+**Implemented layout:** each plan is a bordered card (the one place cards are used on purpose, because a plan is a distinct object with its own steps and actions). The card has a 20px title, a 14px `course · Due date · relative` line, a one-line progress summary (`3 steps · 1 done · 2 h 30 min left · 1 of 2 scheduled`), a small "Steps" label, and a **numbered** list of steps. A step shows its number in a circle, a checkbox with a 16px title, its length below in 14px, and on the right its saved time or "Not scheduled" with **Pick time / Change time**, **Clear time** and **Remove** links (under the text on phones). Below the list: an add-step line, a bordered "Proposed times" panel (a **bulleted** list; **Save these times** is its one primary action), then a ruled footer with Suggest times and a two-step Delete plan. `New plan` is the page's one primary button. The page does not carry an "uses AI" notice. Planning preferences are a collapsed card at the bottom.
+
+Pick time opens an inline form (date, start, computed end). A booked time shows a warning panel with a bulleted list of what is there, **Add anyway** as the primary action, and **Choose another time**.
 
 ### Study Assistant
 

@@ -46,8 +46,8 @@ export default function NewPlanForm({ assignments, courses, planned, busy, error
     onCreate({ course_id: Number(courseId), title: title.trim(), due_at: due });
   }
 
-  return <form className="plan-form work-section" onSubmit={submit} aria-label="New study plan">
-    <div className="work-section-head"><h2 className="section-title">New plan</h2></div>
+  return <form className="plan-form plan-card" onSubmit={submit} aria-label="New study plan">
+    <header className="plan-header"><h2 className="plan-title">New plan</h2></header>
     <fieldset className="plan-mode">
       <legend>Plan for</legend>
       <label><input type="radio" name="plan-mode" checked={mode === "assignment"} disabled={!available.length} onChange={() => setMode("assignment")} /> A Canvas assignment</label>

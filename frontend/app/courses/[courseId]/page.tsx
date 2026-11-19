@@ -110,7 +110,7 @@ function CourseView() {
 
   return (
     <div className={`page-content course-page ${getCourseAccent(details.course_id)}`}>
-      <p className="course-back"><Link href="/courses" className="text-link">← All courses</Link></p>
+      <p className="course-back"><Link href="/courses" className="primary-button btn-sm button-link">← All courses</Link></p>
       <header className="page-header">
         <div>
           <h1 className="page-title">{code}</h1>
@@ -162,7 +162,7 @@ function CourseView() {
       <section className="work-section" aria-labelledby="course-times">
         <div className="work-section-head">
           <h2 id="course-times" className="section-title">Class times</h2>
-          <Link href="/class-schedule" className="text-link">Manage in Class Schedule</Link>
+          <Link href="/class-schedule" className="primary-button btn-sm button-link">Manage in Class Schedule</Link>
         </div>
         {details.meetings.length === 0
           ? <p className="list-message">No class times yet. Add them in <Link href="/class-schedule" className="text-link">Class Schedule</Link>; your syllabus may already have suggestions.</p>

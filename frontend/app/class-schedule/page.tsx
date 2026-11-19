@@ -173,10 +173,10 @@ export default function ClassSchedulePage() {
               <div className="week-tools">
                 {weekRange && (
                   <div className="week-nav" role="group" aria-label="Choose week">
-                    <button className="primary-button btn-ghost btn-sm" aria-label="Previous week" disabled={weekOffset === 0} onClick={() => setWeekOffset((offset) => Math.max(0, offset - 1))}>‹</button>
+                    <button className="primary-button btn-sm" aria-label="Previous week" disabled={weekOffset === 0} onClick={() => setWeekOffset((offset) => Math.max(0, offset - 1))}>‹</button>
                     <span className="week-label" aria-live="polite">{weekRange}</span>
-                    <button className="primary-button btn-ghost btn-sm" aria-label="Next week" disabled={weekOffset >= MAX_WEEKS_AHEAD} onClick={() => setWeekOffset((offset) => Math.min(MAX_WEEKS_AHEAD, offset + 1))}>›</button>
-                    {weekOffset > 0 && <button className="primary-button btn-ghost btn-sm" onClick={() => setWeekOffset(0)}>This week</button>}
+                    <button className="primary-button btn-sm" aria-label="Next week" disabled={weekOffset >= MAX_WEEKS_AHEAD} onClick={() => setWeekOffset((offset) => Math.min(MAX_WEEKS_AHEAD, offset + 1))}>›</button>
+                    {weekOffset > 0 && <button className="primary-button btn-sm" onClick={() => setWeekOffset(0)}>This week</button>}
                   </div>
                 )}
                 <span className="panel-note">
@@ -201,8 +201,8 @@ export default function ClassSchedulePage() {
                 <div className="work-section-head">
                   <h2 id={labelId} className="section-title">{courseLabel(course)} <span className="priority-count">{courseTitle(course.name)}</span></h2>
                   <div className="meeting-buttons">
-                    <button className="primary-button btn-ghost btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
-                    <button className="primary-button btn-ghost btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id, kind: "study" }); }}>Add study block</button>
+                    <button className="primary-button btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id }); }}>Add class time</button>
+                    <button className="primary-button btn-sm" disabled={busy} onClick={() => { setFormError(""); setForm({ type: "new", courseId: course.course_id, kind: "study" }); }}>Add study block</button>
                   </div>
                 </div>
 
