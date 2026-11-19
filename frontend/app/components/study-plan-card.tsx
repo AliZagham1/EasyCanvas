@@ -111,7 +111,7 @@ export default function StudyPlanCard({ plan, proposal, now, zone, busy, onAddSt
           ? <><button type="button" className="primary-button btn-primary" disabled={busy} onClick={() => void savePick(true)}>Add anyway</button>
               <button type="button" className="primary-button" disabled={busy} onClick={() => setConflicts(null)}>Choose another time</button></>
           : <button type="submit" className="primary-button btn-primary" disabled={busy}>Save time</button>}
-        <button type="button" className="primary-button btn-ghost" disabled={busy} onClick={closePicker}>Cancel</button>
+        <button type="button" className="primary-button" disabled={busy} onClick={closePicker}>Cancel</button>
       </div>
     </form>}
 

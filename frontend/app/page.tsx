@@ -137,7 +137,7 @@ export default function Home() {
         <section className="work-section dashboard-upcoming" aria-labelledby="upcoming-title" aria-busy={isLoading}>
           <div className="work-section-head">
             <h2 id="upcoming-title" className="section-title">Upcoming Assignments</h2>
-            <Link href="/upcoming" className="text-link">
+            <Link href="/upcoming" className="primary-button btn-sm button-link">
               View all upcoming
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
                 <path d="M5 12h14m-6-6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
